@@ -53,34 +53,78 @@ CRITERIA = {
 }
 
 TRACE = [
-    {"step": 1, "agent": "Criteria agent", "tool": "llm.parse_criteria", "model": "Llama-3.3-70B (FP8)", "ms": 4210,
+    {"step": 1, "agent": "Criteria parser (LLM 2)", "tool": "llm2.parse_criteria", "model": "gpt-oss-120b", "ms": 3820,
+     "tokens": "1 call, 52 tokens a second output",
      "detail": "Found 8 criteria in the eligibility text. 2 can be checked against the patient record. 6 need the GP notes to be read."},
-    {"step": 2, "agent": "Structured filter", "tool": "pandas.query", "model": None, "ms": 38,
-     "detail": "Age under 18 ruled out 41 patients. BMI outside 18.5 to 35 ruled out 22 more. 137 patients remain."},
-    {"step": 3, "agent": "Evidence retriever", "tool": "embed.search(top_k=3)", "model": "bge-small", "ms": 1870,
-     "detail": "Indexed 684 GP notes. Found the 3 most relevant passages for each patient and criterion (2,466 passages)."},
-    {"step": 4, "agent": "Notes judge", "tool": "llm.judge (async x32)", "model": "Nemotron Nano 9B v2", "ms": 21450,
-     "detail": "Made 822 decisions: 214 met, 497 not met, 111 unknown. 3 answers without an exact quote from a note were changed to unknown."},
-    {"step": 5, "agent": "Ranker", "tool": "rank.score", "model": None, "ms": 12,
-     "detail": "Ruled out 96 patients with an exclusion in their notes. 12 of the remaining 41 are likely eligible."},
+    {"step": 2, "agent": "SQL query on the data warehouse", "tool": "duckdb (read only)", "model": None, "ms": 41,
+     "tokens": "No AI model used",
+     "detail": "Age under 18 ruled out 41 patients. BMI outside 18.5 to 35 ruled out 22 more. 137 patients and their 684 notes passed to the next step."},
+    {"step": 3, "agent": "Notes screening (LLM 1)", "tool": "llm1.screen (32 at a time)", "model": "Nemotron Nano 9B v2", "ms": 18900,
+     "tokens": "41,200 tokens a second input (prefill)",
+     "detail": "Read every note for 137 patients. Made 822 decisions: 214 met, 497 not met, 111 not known. Ruled out 96 patients with an exclusion. 41 remain."},
+    {"step": 4, "agent": "Shortlist review (LLM 2)", "tool": "llm2.finalise", "model": "gpt-oss-120b", "ms": 4630,
+     "tokens": "48 tokens a second output (decode)",
+     "detail": "Reviewed the 41 remaining patients. Ranked 12 as likely eligible and wrote the reason and quotes for each."},
+    {"step": 5, "agent": "Validation", "tool": "validate.quotes_and_records", "model": None, "ms": 210,
+     "tokens": "No AI model used",
+     "detail": "Checked 1,233 quotes against the original notes and every record value against the warehouse. 3 quotes were not found word for word, so those answers were changed to not known. 0 unchecked quotes reached you."},
 ]
+
+SQL = """SELECT p.patient_id, p.age, p.sex, p.bmi
+FROM patients AS p
+WHERE p.age >= ?            -- C1: 18
+  AND p.bmi BETWEEN ? AND ? -- C2: 18.5, 35
+  AND p.practice_id = ?     -- demo practice
+ORDER BY p.patient_id;"""
+
+SQL_FUNNEL = [("All patients at the practice", 200), ("C1: age 18 or over", 159), ("C2: BMI 18.5 to 35", 137)]
 
 FUNNEL = [
     ("GP practice list", 200),
-    ("After structured filter", 137),
+    ("Passed SQL record checks", 137),
     ("No exclusion found in notes", 41),
     ("Likely eligible (shortlist)", 12),
 ]
 
 STATS = {
-    "model": "Nemotron Nano 9B v2 + Llama-3.3-70B",
+    "model": "gpt-oss-120b + Nemotron Nano 9B v2",
     "host": "DGX Spark (GB10, 128 GB)",
     "endpoint": "http://localhost:8000/v1",
     "bytes_off_device": 0,
-    "notes_per_min": 1914,
-    "gpu_mem_gb": 71.4,
+    "notes_per_min": 2170,
+    "gpu_mem_gb": 96.2,
     "runtime_s": 27.6,
 }
+
+# ---------- Create a trial from free text ----------
+CREATE_EXAMPLE = (
+    "I need adults with early non-small cell lung cancer (stage 1 to 3A) who are still fully active or nearly so, "
+    "and who have seen their GP in the last year. BMI between 18.5 and 35. Please leave out anyone who has had chemo "
+    "or radiotherapy for their lung cancer, anyone treated for an autoimmune condition in the last 2 years, "
+    "and anyone who is pregnant or planning a pregnancy."
+)
+
+# Criteria agent output for CREATE_EXAMPLE. "from" is the phrase in the description each criterion came from.
+_PARSED_FROM = {
+    "C1": ("adults", "Taken 'adults' to mean age 18 or over."),
+    "C2": ("BMI between 18.5 and 35", None),
+    "C3": ("early non-small cell lung cancer (stage 1 to 3A)", None),
+    "C4": ("still fully active or nearly so", "Taken 'fully active or nearly so' to mean ECOG performance status 0 or 1."),
+    "C5": ("seen their GP in the last year", "Taken 'the last year' to mean the 12 months before today."),
+    "C6": ("treated for an autoimmune condition in the last 2 years", "Taken 'treated' to mean systemic treatment, such as steroids or immunosuppressants. Creams and thyroid replacement alone do not count."),
+    "C7": ("had chemo or radiotherapy for their lung cancer", None),
+    "C8": ("pregnant or planning a pregnancy", None),
+}
+
+
+def parse_description(text):
+    """Mock of the criteria agent on free text. Real version: LLM 2 with guided JSON output."""
+    out = []
+    for c in CRITERIA["NCT-MOCK-0001"]:
+        phrase, assumption = _PARSED_FROM[c["id"]]
+        out.append({**c, "from": phrase, "assumption": assumption})
+    return out
+
 
 # Status per criterion: MET / NOT_MET / UNKNOWN. Structured criteria cite the record field, free text cites a note.
 def _s(field, value):
@@ -180,4 +224,4 @@ def get_criteria(trial_id):
 
 
 def get_run(trial_id):
-    return {"trace": TRACE, "funnel": FUNNEL, "stats": STATS, "results": RESULTS}
+    return {"trace": TRACE, "funnel": FUNNEL, "stats": STATS, "results": RESULTS, "sql": SQL, "sql_funnel": SQL_FUNNEL}

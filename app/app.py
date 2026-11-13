@@ -147,13 +147,30 @@ details.nhs-details code, .nhs-code{font-family:monospace; font-size:16px; backg
 *:focus-visible{outline:4px solid var(--focus) !important; outline-offset:0 !important; box-shadow:0 4px 0 var(--focus-text) !important;}
 
 /* Form fields */
-.stTextInput label p, .stSelectbox label p, .stRadio > label p, .stToggle label p{font-size:19px !important; color:var(--text) !important;}
+.stTextInput label p, .stNumberInput label p, .stSelectbox label p, .stRadio > label p, .stToggle label p{font-size:19px !important; color:var(--text) !important;}
 [data-baseweb="input"], [data-baseweb="select"] > div{border:2px solid var(--input-border) !important; border-radius:0 !important; background:var(--white) !important;}
 [data-baseweb="input"]:focus-within, [data-baseweb="select"] > div:focus-within{outline:4px solid var(--focus) !important; box-shadow:inset 0 0 0 2px var(--text) !important;}
 input{background:var(--white) !important; color:var(--text) !important; font-size:19px !important;}
 [data-baseweb="select"] div{font-size:19px !important; color:var(--text) !important;}
 .stRadio [role="radiogroup"] label{padding:8px 0 !important;}
 .stRadio [role="radiogroup"] label p{font-size:19px !important;}
+
+/* Labels, hints, textarea (NHS form patterns) */
+.nhs-label{display:block; font-size:19px; line-height:28px; font-weight:700; color:var(--text); margin:24px 0 4px;}
+.nhs-hint{font-size:19px; line-height:28px; color:var(--secondary); margin:0 0 8px;}
+.nhs-count{font-size:16px; color:var(--secondary); margin:4px 0 24px;}
+[data-baseweb="textarea"]{border:2px solid var(--input-border) !important; border-radius:0 !important; background:var(--white) !important;}
+[data-baseweb="textarea"]:focus-within{outline:4px solid var(--focus) !important; box-shadow:inset 0 0 0 2px var(--text) !important;}
+textarea{font-size:19px !important; line-height:28px !important; color:var(--text) !important; background:var(--white) !important;}
+.from mark{background:var(--pale-yellow); color:var(--text); padding:0 2px; box-shadow:0 2px 0 var(--warm-yellow);}
+.from sup{font-size:14px; font-weight:700; color:var(--dark-blue); margin-left:2px;}
+.nhs-warning ul{margin:0; padding-left:24px;} .nhs-warning li{font-size:19px; line-height:28px; margin-bottom:8px;}
+.nhs-warning h3{font-size:22px; line-height:30px; margin:0 0 8px; padding:0 !important;}
+.nhs-code{display:block; white-space:pre; padding:16px; border-left:4px solid var(--border); overflow-x:auto; font-size:15px; line-height:22px;}
+ol.nhs-steps{padding-left:24px; margin:0;} ol.nhs-steps li{font-size:19px; line-height:28px; margin-bottom:8px;}
+.stDownloadButton button{background:var(--white) !important; color:var(--sec-button) !important; border:2px solid var(--sec-button) !important; box-shadow:0 4px 0 var(--sec-button) !important; border-radius:4px !important; font-weight:700 !important;}
+.stDownloadButton button p{font-size:19px !important; font-weight:700 !important;}
+[data-testid="stExpander"] summary p{font-size:19px !important; color:var(--link); text-decoration:underline;}
 
 /* Tabs (NHS tabs pattern) */
 .stTabs [role="tab"] *{font-size:19px !important;}
@@ -216,18 +233,33 @@ def rule_text(c):
 ss = st.session_state
 ss.setdefault("ran", False)
 ss.setdefault("decisions", {})
+ss.setdefault("page", "trial")
+ss.setdefault("my_trials", [])
+ss.setdefault("draft", None)
 
-trials = data.get_trials()
+trials = ss.my_trials + data.get_trials()
 stats = data.STATS
 
 # ---------- Sidebar: search form ----------
 with st.sidebar:
-    md('<h2 class="nhs-heading-s" style="margin-top:8px">Find patients for a trial</h2>')
+    md('<h2 class="nhs-heading-s" style="margin-top:8px">Your trials</h2>')
     labels = [f"{t['id']}: {t['title']}" for t in trials]
-    trial = trials[labels.index(st.selectbox("Trial", labels))]
-    st.text_input("Or enter a ClinicalTrials.gov ID", placeholder="For example, NCT01234567")
+    if "pending_pick" in ss:
+        ss.trial_pick = ss.pop("pending_pick")
+    if ss.get("trial_pick") not in labels:
+        ss.trial_pick = labels[0]
+
+    def _picked():
+        ss.page = "trial"
+        ss.ran = False
+
+    trial = trials[labels.index(st.selectbox("Trial", labels, key="trial_pick", on_change=_picked))]
     st.selectbox("Patient records", ["Demo GP practice (200 synthetic patients)"])
-    go = st.button("Find eligible patients", type="primary", use_container_width=True)
+    go = st.button("Find eligible patients", type="primary", use_container_width=True, disabled=ss.page == "create")
+    if st.button("Create a new trial", use_container_width=True):
+        ss.page = "create"
+        ss.draft = None
+        st.rerun()
     st.toggle("Use saved demo run", value=True, help="Replays a run saved earlier, in case the live run is slow.")
     mem = stats["gpu_mem_gb"] / 128 * 100
     md('<div class="nhs-card nhs-card--device" style="margin-top:24px">'
@@ -244,13 +276,104 @@ with st.sidebar:
 md('<header class="nhs-header"><span class="nhs-header__service">TrialMatch</span>'
    '<span class="nhs-header__org">Clinical trial recruitment</span>'
    '<span class="nhs-header__status">Running on this device</span></header>'
-   '<nav class="nhs-header__nav"><span>Trials</span><span>Review queue</span><span>How it works</span></nav>')
+   '<nav class="nhs-header__nav"><span>Your trials</span><span>Create a trial</span><span>Review queue</span><span>How it works</span></nav>')
 
-md(f'<nav class="nhs-breadcrumb"><a href="#">Trials</a><span class="chev">›</span>{trial["id"]}</nav>'
+
+def footer():
+    md('<footer class="nhs-footer"><ul><li>How TrialMatch works</li><li>Data and privacy</li><li>Accessibility</li></ul>'
+       f'<p style="margin:0">Models run on {stats["host"]}. No patient data leaves this device. All patient data shown is synthetic. '
+       'TrialMatch supports recruiters. It does not decide who is eligible.</p></footer>')
+
+
+def highlight_description(text, crits):
+    out = html.escape(text)
+    for c in crits:
+        ph = html.escape(c["from"])
+        if ph in out:
+            out = out.replace(ph, f'<mark>{ph}</mark><sup>{c["id"]}</sup>', 1)
+    return out
+
+
+# ---------- Create a trial ----------
+if ss.page == "create":
+    md('<nav class="nhs-breadcrumb"><a href="#">Your trials</a><span class="chev">›</span>Create a trial</nav>'
+       '<div class="nhs-caption-l">New trial</div><h1 class="nhs-heading-l">Create a trial</h1>')
+    main, side = st.columns([2, 1], gap="large")
+    with side:
+        md('<div class="nhs-card nhs-card--device"><h2 class="nhs-heading-s">What happens next</h2><ol class="nhs-steps">'
+           '<li>The agent turns your description into a list of criteria.</li>'
+           '<li>You check each criterion and the assumptions it made.</li>'
+           '<li>You save the trial and TrialMatch searches your patients.</li>'
+           '<li>You review every patient before anyone is contacted.</li></ol>'
+           '<p class="nhs-body-s nhs-secondary" style="margin:16px 0 0">Everything you type stays on this device.</p></div>')
+    with main:
+        name = st.text_input("Trial name", value="Early lung cancer immunotherapy study")
+        source = st.radio("How do you want to add the criteria?", ["Describe who you need", "Import from ClinicalTrials.gov"])
+        if source == "Import from ClinicalTrials.gov":
+            st.text_input("ClinicalTrials.gov ID", placeholder="For example, NCT01234567",
+                          help="The ID starts with NCT followed by 8 numbers.")
+            text = data.TRIALS[0]["eligibility_text"]
+        else:
+            md('<label class="nhs-label">Describe who you need</label>'
+               '<p class="nhs-hint">Write it as you would to a colleague. Include age, conditions, treatments, '
+               'tests, and anything that would rule someone out.</p>')
+            text = st.text_area("Describe who you need", value=data.CREATE_EXAMPLE, height=200, label_visibility="collapsed")
+            md(f'<p class="nhs-count">You have used {len(text)} characters</p>')
+        target = st.number_input("How many participants do you need?", min_value=1, value=40, step=1)
+        if st.button("Turn into criteria", type="primary"):
+            ss.draft = {"name": name, "text": text, "target": int(target), "criteria": data.parse_description(text)}
+            st.rerun()
+
+        if ss.draft:
+            d = ss.draft
+            crits = d["criteria"]
+            md('<h2 class="nhs-heading-m" style="margin-top:32px">Check the criteria</h2>'
+               f'<p class="nhs-body">The agent found {len(crits)} criteria in your description. '
+               'The highlighted words show where each one came from.</p>'
+               f'<div class="nhs-inset from">{highlight_description(d["text"], crits)}</div>')
+            asm = [c for c in crits if c.get("assumption")]
+            if asm:
+                md('<div class="nhs-warning"><span class="nhs-warning__label">Important</span>'
+                   f'<h3>Check {len(asm)} assumptions</h3><ul>'
+                   + "".join(f'<li><strong>{c["id"]}:</strong> {html.escape(c["assumption"])}</li>' for c in asm)
+                   + '</ul></div>')
+            rows = "".join(
+                f'<tr><td><strong>{c["id"]}</strong></td><td>{html.escape(c["text"])}'
+                f'{"<br><span class=nhs-secondary style=font-size:16px>Rule: " + rule_text(c) + "</span>" if rule_text(c) else ""}</td>'
+                f'<td>{type_tag(c)}</td><td>{method_tag(c)}</td></tr>' for c in crits)
+            md('<table class="nhs-table" style="margin-top:32px"><caption>Criteria for this trial</caption>'
+               '<thead><tr><th>ID</th><th>Criterion</th><th>Type</th><th>Checked using</th></tr></thead>'
+               f'<tbody>{rows}</tbody></table>')
+            with st.expander("Change or add criteria"):
+                import pandas as pd
+                df = pd.DataFrame([{"ID": c["id"], "Criterion": c["text"],
+                                    "Type": c["type"].capitalize(),
+                                    "Checked using": "Patient record" if c["kind"] == "structured" else "GP notes"} for c in crits])
+                st.data_editor(df, num_rows="dynamic", hide_index=True, use_container_width=True, column_config={
+                    "Type": st.column_config.SelectboxColumn("Type", options=["Inclusion", "Exclusion"]),
+                    "Checked using": st.column_config.SelectboxColumn("Checked using", options=["Patient record", "GP notes"])})
+            b1, b2, _ = st.columns([1.4, 1, 1])
+            if b1.button("Save trial and find patients", type="primary", use_container_width=True):
+                new = {"id": f"LOCAL-{len(ss.my_trials) + 1:04d}", "title": d["name"], "sponsor": "Created on this device",
+                       "phase": "Not registered", "target": d["target"], "eligibility_text": d["text"], "local": True}
+                ss.my_trials.insert(0, new)
+                ss.pending_pick = f"{new['id']}: {new['title']}"
+                ss.page, ss.ran, ss.autorun, ss.draft = "trial", False, True, None
+                st.rerun()
+            if b2.button("Start again", use_container_width=True):
+                ss.draft = None
+                st.rerun()
+    footer()
+    st.stop()
+
+if ss.pop("autorun", False):
+    go = True
+
+md(f'<nav class="nhs-breadcrumb"><a href="#">Your trials</a><span class="chev">›</span>{trial["id"]}</nav>'
    f'<div class="nhs-caption-l">{trial["id"]}</div>'
    f'<h1 class="nhs-heading-l">{html.escape(trial["title"])}</h1>'
    f'<p class="nhs-body">{tag(trial["phase"], "tag-blue")}{tag("Recruiting", "tag-green")} '
-   f'Sponsor: {trial["sponsor"]}. Aim: {trial["target"]} participants.</p>')
+   f'{"Created on this device" if trial.get("local") else "Sponsor: " + trial["sponsor"]}. Aim: {trial["target"]} participants.</p>')
 
 criteria = data.get_criteria(trial["id"])
 run = data.get_run(trial["id"])
@@ -283,9 +406,14 @@ tab_crit, tab_trace, tab_list, tab_review = st.tabs(["Criteria", "Agent steps", 
 with tab_crit:
     left, right = st.columns([1, 1.4], gap="large")
     with left:
-        md('<h2 class="nhs-heading-m">Eligibility text</h2>'
-           '<div class="nhs-inset">' + "".join(f"<p>{html.escape(p)}</p>" for p in trial["eligibility_text"].split("\n")) + '</div>'
-           '<p class="nhs-body-s nhs-secondary">From ClinicalTrials.gov. Saved on this device so the demo works offline.</p>')
+        if trial.get("local"):
+            md('<h2 class="nhs-heading-m">Your description</h2>'
+               f'<div class="nhs-inset from">{highlight_description(trial["eligibility_text"], data.parse_description(trial["eligibility_text"]))}</div>'
+               '<p class="nhs-body-s nhs-secondary">Written by you when you created this trial.</p>')
+        else:
+            md('<h2 class="nhs-heading-m">Eligibility text</h2>'
+               '<div class="nhs-inset">' + "".join(f"<p>{html.escape(p)}</p>" for p in trial["eligibility_text"].split("\n")) + '</div>'
+               '<p class="nhs-body-s nhs-secondary">From ClinicalTrials.gov. Saved on this device so the demo works offline.</p>')
     with right:
         rows = "".join(
             f'<tr><td><strong>{c["id"]}</strong></td><td>{html.escape(c["text"])}'
@@ -309,7 +437,7 @@ with tab_trace:
             for s in run["trace"]:
                 model = f'<code>{s["model"]}</code>' if s["model"] else "none (no AI model used)"
                 items += (f'<li><div class="row"><span class="name">{s["step"]}. {s["agent"]}</span>'
-                          f'<span class="time">{s["ms"]/1000:.2f} seconds</span>{tag("Completed", "tag-green")}</div>'
+                          f'<span class="time">{s["ms"]/1000:.2f} seconds · {s["tokens"]}</span>{tag("Completed", "tag-green")}</div>'
                           f'<div class="bar"><i style="width:{max(s["ms"]/total*100, 1):.1f}%"></i></div>'
                           f'<p class="nhs-body" style="margin:0">{html.escape(s["detail"])}</p>'
                           f'<details class="nhs-details"><summary>Show technical details</summary><div class="nhs-details__text">'
@@ -323,8 +451,16 @@ with tab_trace:
             md(f'<div class="nhs-card"><h2 class="nhs-heading-s">How patients were narrowed down</h2><div class="funnel">{fr}</div>'
                '<p class="nhs-body-s nhs-secondary" style="margin:0">Quick record checks run first, so only the remaining patients have their notes read.</p></div>')
             md('<div class="nhs-card nhs-card--device"><h2 class="nhs-heading-s">Models on this device</h2><table class="nhs-summary" style="margin:0">'
-               '<tr><th>Reading criteria</th><td>Llama 3.3 70B</td></tr><tr><th>Reading notes</th><td>Nemotron Nano 9B</td></tr>'
-               '<tr><th>Finding passages</th><td>bge-small</td></tr><tr><th>Server</th><td>vLLM, local only</td></tr></table></div>')
+               '<tr><th>LLM 2: criteria and shortlist</th><td>gpt-oss-120b (mixture of experts)</td></tr>'
+               '<tr><th>LLM 1: screening notes</th><td>Nemotron Nano 9B v2</td></tr>'
+               '<tr><th>Data warehouse</th><td>DuckDB, read only</td></tr><tr><th>Server</th><td>vLLM, local only</td></tr></table></div>')
+        sqlf = "".join(f'<tr><td>{html.escape(l)}</td><td class="num">{n}</td></tr>' for l, n in run["sql_funnel"])
+        md('<div class="nhs-card"><h2 class="nhs-heading-s">SQL query sent to the data warehouse</h2>'
+           '<p class="nhs-body">The criteria that can be checked against the patient record become a read-only, '
+           'parameterised query. The AI model does not write SQL.</p>'
+           f'<code class="nhs-code">{html.escape(run["sql"])}</code>'
+           f'<table class="nhs-table" style="margin-top:24px"><caption>Patients left after each check</caption>'
+           f'<thead><tr><th>Check</th><th class="num">Patients</th></tr></thead><tbody>{sqlf}</tbody></table></div>')
 
 # ---------- 3. Shortlist ----------
 with tab_list:
@@ -359,6 +495,18 @@ with tab_list:
            '<span class="marks"><span class="m-unk">?</span></span> not known, needs checking &nbsp; '
            '<span class="marks"><span class="m-exc">✕</span></span> exclusion found</p>'
            '<div class="nhs-inset">TrialMatch helps recruiters find patients. A recruiter must check and approve every patient before anyone is contacted.</div>')
+        import json
+        manifest = {"trial": trial["id"], "generated_on": "this device", "patients": [
+            {"patient_id": r["patient_id"], "score": r["score"], "excluded": bool(r.get("excluded")),
+             "decision": ss.decisions.get(r["patient_id"], "to review"), "reason": r["explanation"],
+             "evidence": {k: {"status": v["status"], "source": v["source"], "quote": v["quote"]} for k, v in r["criteria"].items()}}
+            for r in results]}
+        d1, d2, _ = st.columns([1, 1, 2])
+        d1.download_button("Download shortlist (CSV)", "patient_id,score,decision\n" + "\n".join(
+            f'{p["patient_id"]},{p["score"]},{p["decision"]}' for p in manifest["patients"] if not p["excluded"]),
+            f"{trial['id']}-shortlist.csv", use_container_width=True)
+        d2.download_button("Download manifest (JSON)", json.dumps(manifest, indent=2), f"{trial['id']}-manifest.json",
+                           use_container_width=True)
 
 # ---------- 4. Review queue ----------
 with tab_review:
@@ -421,6 +569,4 @@ with tab_review:
                    f'<h3 class="nhs-heading-xs">{cid}: {html.escape(c["text"])}</h3>'
                    f'<div>{type_tag(c)}{result}<span class="nhs-body-s nhs-secondary">Confidence {ev["confidence"]*100:.0f}%</span></div>{body}</div>')
 
-md('<footer class="nhs-footer"><ul><li>How TrialMatch works</li><li>Data and privacy</li><li>Accessibility</li></ul>'
-   f'<p style="margin:0">Models run on {stats["host"]}. No patient data leaves this device. All patient data shown is synthetic. '
-   'TrialMatch supports recruiters. It does not decide who is eligible.</p></footer>')
+footer()

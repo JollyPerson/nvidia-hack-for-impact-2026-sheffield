@@ -5,7 +5,7 @@ pip install -r app/requirements.txt
 streamlit run app/app.py
 ```
 
-Runs entirely on mock data in `app/mock_data.py`. Its three functions (`get_trials`, `get_criteria`, `get_run`)
+Runs entirely on mock data in `app/mock_data.py`. `parse_description(text)` is the seam for the criteria parser on free text (Create a trial page); `get_run()` also returns `sql` and `sql_funnel` for the SQL panel. Its three functions (`get_trials`, `get_criteria`, `get_run`)
 are the seam for the real pipeline: return the same shapes and the UI keeps working.
 
 Screens (tabs): parsed criteria, live agent trace + funnel, ranked shortlist, recruiter review with
