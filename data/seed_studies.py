@@ -37,8 +37,8 @@ PNEUMONIA = Study(
     recruitment_start=date(2026, 10, 1),
     recruitment_end=date(2027, 9, 30),
     chief_investigator="Dr Amira Shah",
-    sponsor="Sheffield Teaching Research Trust (mock)",
-    ethics_reference="IRAS 999001 (mock)",
+    sponsor="Sheffield Teaching Research Trust (fictional)",
+    ethics_reference="IRAS 999001 (fictional)",
     status="recruiting",
     criteria=[
         C(id="C1", type="inclusion", kind="structured", description="Aged 16 or over",
@@ -75,8 +75,8 @@ HEART_FAILURE = Study(
     recruitment_start=date(2026, 9, 1),
     recruitment_end=date(2027, 8, 31),
     chief_investigator="Dr Helen Marsh",
-    sponsor="Northern Cardiovascular Research Network (mock)",
-    ethics_reference="IRAS 999004 (mock)",
+    sponsor="Northern Cardiovascular Research Network (fictional)",
+    ethics_reference="IRAS 999004 (fictional)",
     status="recruiting",
     criteria=[
         C(id="C1", type="inclusion", kind="structured", description="Aged 18 or over",
@@ -113,6 +113,8 @@ def seed(db: Path, reset: bool = False) -> list[str]:
         existing = store.get_study(study.id, db=db)
         if existing is not None and existing.criteria != study.criteria:
             store.replace_criteria(study.id, study.criteria, db=db)  # demo criteria changed since last start
+        if existing is not None and existing.model_dump(exclude={"criteria"}) != study.model_dump(exclude={"criteria"}):
+            store.update_study_details(study, db=db)
         if existing is None:
             store.create_study(study, db=db)
             store.append_audit(
