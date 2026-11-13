@@ -1,0 +1,52 @@
+# TrialMatch on the DGX Spark: our own Ollama + the Streamlit UI.
+# The organiser's spark-hack-ollama container (127.0.0.1:11434) is separate and untouched.
+#
+#   cd ~/trialmatch/deploy && docker compose up -d --build
+#
+# LANIP must be the Spark's LAN address (deploy.sh sets it). Both ports bind to it only.
+name: trialmatch
+
+services:
+  ollama:
+    image: spark-hack-ollama:prepared   # organiser's prepared image, Ollama 0.40.16; never pulled
+    pull_policy: never
+    container_name: trialmatch-ollama
+    restart: unless-stopped
+    ports:
+      - "${LANIP:?set LANIP}:11434:11434"
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_NUM_PARALLEL: "8"
+      OLLAMA_MAX_LOADED_MODELS: "2"      # screener (Lightning) + verifier (Qwen), per AGENTS.md
+      OLLAMA_KEEP_ALIVE: "-1"
+      OLLAMA_CONTEXT_LENGTH: "16384"
+      OLLAMA_NO_CLOUD: "1"
+      OLLAMA_NOPRUNE: "1"
+    volumes:
+      - ${MODELS_DIR:-/home/user1/spark-hackathon/ollama-models}:/root/.ollama/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  ui:
+    build:
+      context: .
+      dockerfile: ui.Dockerfile
+    image: trialmatch-ui:latest
+    container_name: trialmatch-ui
+    restart: unless-stopped
+    depends_on: [ollama]
+    ports:
+      - "${LANIP:?set LANIP}:8501:8501"
+    environment:
+      OPENAI_BASE_URL: http://ollama:11434/v1
+      OPENAI_API_KEY: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      SCREENER_MODEL: nemotron-3.5-lightning:30b
+      VERIFIER_MODEL: qwen3.6:35b-a3b
+    volumes:
+      - ${APP_DIR:-/home/user1/trialmatch/ui}:/srv/app
