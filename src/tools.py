@@ -80,6 +80,19 @@ CITABLE_TABLES = {
     "ClinicalNotes": "NoteID",
 }
 
+_TABLE_LOOKUP = {name.lower(): name for name in CITABLE_TABLES}
+
+
+def resolve_table(name: str) -> str | None:
+    """Map a model-written table name ("clinicalnotes", "ClinicalNote") to the real one."""
+    key = (name or "").strip().lower()
+    return _TABLE_LOOKUP.get(key) or _TABLE_LOOKUP.get(key + "s")
+
+
+def _norm(text) -> str:
+    return " ".join(str(text).lower().split())
+
+
 _STOPWORDS = {"the", "and", "for", "with", "not", "has", "was", "are", "any", "patient", "history"}
 
 
@@ -208,19 +221,36 @@ class PatientTools:
         ).fetchone()
         return dict(r) if r else {}
 
-    def get_record(self, table: str, record_id: str) -> dict | None:
-        """Fetch one cited record, only if it belongs to this patient.
-        Used to hand stage 2 the ORIGINAL records stage 1 pointed at."""
-        key = CITABLE_TABLES.get(table)
-        if key is None:
+    def _raw_record(self, table: str, record_id: str) -> tuple[str, dict] | None:
+        table = resolve_table(table)
+        if table is None:  # unknown table, or PatientContacts
             return None
         r = self.conn.execute(
-            f"SELECT * FROM {table} WHERE {key} = ? AND LocalPatientIdentifier = ?",
+            f"SELECT * FROM {table} WHERE {CITABLE_TABLES[table]} = ? AND LocalPatientIdentifier = ?",
             (record_id, self.patient_id),
         ).fetchone()
-        if r is None:
+        return (table, dict(r)) if r is not None else None
+
+    def get_record(self, table: str, record_id: str, around: str = "") -> dict | None:
+        """Fetch one cited record, only if it belongs to this patient.
+        Used to hand stage 2 the ORIGINAL records stage 1 pointed at. A long note
+        is cut to a window around `around` (the quote stage 1 cited)."""
+        found = self._raw_record(table, record_id)
+        if found is None:
             return None
-        rec = {k: v for k, v in dict(r).items() if v is not None}
+        table, row = found
+        rec = {k: v for k, v in row.items() if v is not None}
         if "NoteText" in rec:
-            rec["NoteText"] = _cut(rec["NoteText"], [], config.MAX_NOTE_CHARS)
+            rec["NoteText"] = _cut(rec["NoteText"], [around.lower()] if around else [], config.MAX_NOTE_CHARS)
         return {"table": table, **rec}
+
+    def citation_checks_out(self, table: str, record_id: str, field: str, quote: str) -> bool:
+        """True if the record exists for THIS patient and really contains the quote
+        (case- and whitespace-insensitive). The full check lives in validation.py;
+        screening uses this so stage 1 never drops a patient on invented evidence."""
+        found = self._raw_record(table, record_id)
+        if found is None or not _norm(quote):
+            return False
+        _, row = found
+        values = [row[field]] if field in row else list(row.values())
+        return any(v is not None and _norm(quote) in _norm(v) for v in values)
