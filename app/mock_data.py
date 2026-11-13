@@ -58,7 +58,7 @@ TRACE = [
      "detail": "Found 8 criteria in the eligibility text. 2 can be checked against the patient record. 6 need the GP notes to be read."},
     {"step": 2, "agent": "SQL query on the data warehouse", "tool": "duckdb (read only)", "model": None, "ms": 41,
      "tokens": "No AI model used",
-     "detail": "Age under 18 ruled out 41 patients. BMI outside 18.5 to 35 ruled out 22 more. 137 patients and their 684 notes passed to the next step."},
+     "detail": "4 patients on a do-not-contact list were left out first. Age under 18 ruled out 39 more. BMI outside 18.5 to 35 ruled out 20 more. 137 patients and their 684 notes passed to the next step."},
     {"step": 3, "agent": "Notes screening (LLM 1)", "tool": "llm1.screen (32 at a time)", "model": "Nemotron Nano 9B v2", "ms": 18900,
      "tokens": "41,200 tokens a second input (prefill)",
      "detail": "Read every note for 137 patients. Made 822 decisions: 214 met, 497 not met, 111 not known. Ruled out 96 patients with an exclusion. 41 remain."},
@@ -75,9 +75,11 @@ FROM patients AS p
 WHERE p.age >= ?            -- C1: 18
   AND p.bmi BETWEEN ? AND ? -- C2: 18.5, 35
   AND p.practice_id = ?     -- demo practice
+  AND p.patient_id NOT IN (SELECT patient_id FROM do_not_contact)
 ORDER BY p.patient_id;"""
 
-SQL_FUNNEL = [("All patients at the practice", 200), ("C1: age 18 or over", 159), ("C2: BMI 18.5 to 35", 137)]
+SQL_FUNNEL = [("All patients at the practice", 200), ("Not on a do-not-contact list", 196),
+              ("C1: age 18 or over", 157), ("C2: BMI 18.5 to 35", 137)]
 
 FUNNEL = [
     ("GP practice list", 200),
@@ -250,3 +252,43 @@ def whatif(bmi_max=35, age_min=18, dropped=()):
     n += {16: 0, 18: 0}.get(age_min, -round((age_min - 18) * 0.05))
     n += sum({"C4": 4, "C5": 3, "C6": 5, "C7": 2, "C8": 1}.get(c, 0) for c in dropped)
     return max(n, 0)
+
+
+# ---------- Do-not-contact flags (removed before any screening) ----------
+DO_NOT_CONTACT = [
+    {"patient_id": "P-0031", "reason": "National data opt-out registered"},
+    {"patient_id": "P-0102", "reason": "Asked not to be contacted about research (coded in record)"},
+    {"patient_id": "P-0147", "reason": "On the palliative care register"},
+    {"patient_id": "P-0188", "reason": "Recorded as deceased, record not yet closed"},
+]
+
+# ---------- Fairness: shortlist compared with the whole practice (percent) ----------
+FAIRNESS = {
+    "Age": [("18 to 49", 31, 17), ("50 to 69", 42, 50), ("70 and over", 27, 33)],
+    "Sex": [("Female", 51, 50), ("Male", 49, 50)],
+    "Deprivation (IMD quintile)": [("1: most deprived", 24, 8), ("2", 21, 17), ("3", 19, 25), ("4", 18, 25), ("5: least deprived", 18, 25)],
+}
+FAIRNESS_FLAGS = [
+    "People from the most deprived areas are 24% of the practice but 8% of the shortlist. Check whether criterion C5 "
+    "(seen by GP in the last 12 months) is screening out people who use the GP less often.",
+]
+
+# ---------- Invitation letter (draft, edited and sent by the patient's own GP practice) ----------
+LETTER = """Dear {first_name},
+
+We are writing because you may be able to take part in a research study. The research nurse can tell you what the study is about when you call.
+
+Your GP practice found that you might be suitable by checking your health record. Your record has not been shared with anyone outside the practice.
+
+Taking part is your choice. If you decide not to, your care will not change in any way.
+
+What happens next
+
+If you would like to find out more, call the practice on 0114 000 0000 and ask for the research nurse. They will explain the study, answer your questions and check that it is right for you.
+
+If you do not want to hear about this study again, you do not need to do anything.
+
+Yours sincerely,
+
+Dr {gp_name}
+On behalf of your GP practice"""

@@ -137,6 +137,7 @@ details.nhs-details .nhs-details__text{border-left:4px solid var(--border); padd
 details.nhs-details code, .nhs-code{font-family:monospace; font-size:16px; background:var(--grey-5); padding:0 4px; color:var(--text);}
 
 /* Funnel chart (palette colours used directly for graph series) */
+.fb2{height:8px; background:var(--grey-5); margin:2px 0;} .fb2 i{display:block; height:8px;}
 .funnel .fr{margin:0 0 16px;} .funnel .fl{display:flex; justify-content:space-between; font-size:19px; line-height:28px;}
 .funnel .fb{height:16px; background:var(--grey-5);} .funnel .fb i{display:block; height:16px; background:var(--blue);}
 
@@ -548,6 +549,23 @@ with tab_list:
         d2.download_button("Download manifest (JSON)", json.dumps(manifest, indent=2), f"{trial['id']}-manifest.json",
                            use_container_width=True)
 
+        md('<h2 class="nhs-heading-m" style="margin-top:32px">Who is on the shortlist?</h2>'
+           '<p class="nhs-body">Trials often leave out older people, people from ethnic minority groups and people in deprived areas '
+           '(see the NIHR INCLUDE guidance). This compares the shortlist with everyone at the practice.</p>')
+        for flag in data.FAIRNESS_FLAGS:
+            md(f'<div class="nhs-warning" style="margin-bottom:24px"><span class="nhs-warning__label">Important</span><p>{html.escape(flag)}</p></div>')
+        fcols = st.columns(3, gap="large")
+        for col, (group, rows_) in zip(fcols, data.FAIRNESS.items()):
+            body_ = "".join(
+                f'<tr><td style="font-size:16px">{html.escape(lbl)}</td><td style="width:55%">'
+                f'<div class="fb2"><i style="width:{pr}%;background:var(--grey-3)"></i></div>'
+                f'<div class="fb2"><i style="width:{sl}%;background:var(--blue)"></i></div></td>'
+                f'<td class="num" style="font-size:16px">{pr}%<br><strong>{sl}%</strong></td></tr>' for lbl, pr, sl in rows_)
+            col.markdown(f'<div class="nhs-card" style="padding:24px"><table class="nhs-table"><caption style="font-size:19px">{group}</caption>'
+                         f'<tbody>{body_}</tbody></table></div>', unsafe_allow_html=True)
+        md('<p class="nhs-body-s"><span style="display:inline-block;width:16px;height:8px;background:var(--grey-3)"></span> whole practice &nbsp; '
+           '<span style="display:inline-block;width:16px;height:8px;background:var(--blue)"></span> <strong>shortlist</strong></p>')
+
 # ---------- 4. Review queue ----------
 with tab_review:
     if not ss.ran:
@@ -591,6 +609,13 @@ with tab_review:
                     st.rerun()
                 st.text_input("Note (optional)", key=f"why_{r['patient_id']}", help="Saved to the audit log with your decision.")
 
+            if ss.decisions.get(r["patient_id"]) == "approved":
+                md('<h2 class="nhs-heading-m" style="margin-top:16px">Invitation letter</h2>'
+                   '<p class="nhs-body">A draft for the patient\'s own GP practice to check, edit and send. '
+                   'It does not mention the patient\'s condition in case someone else opens it.</p>')
+                letter = st.text_area("Letter", value=data.LETTER.format(first_name=r["name"].split()[0], gp_name="A. Patel"),
+                                      height=420, key=f"letter_{r['patient_id']}", label_visibility="collapsed")
+                st.download_button("Download letter", letter, f"{r['patient_id']}-invitation.txt", key=f"dl_{r['patient_id']}")
             md('<h2 class="nhs-heading-m" style="margin-top:16px">Evidence for each criterion</h2>')
             for cid, ev in r["criteria"].items():
                 c = crit_by_id[cid]
@@ -634,8 +659,13 @@ with tab_log:
            '<thead><tr><th>Patient</th><th>Outcome</th><th>Reason</th><th>Decision</th></tr></thead>'
            f'<tbody>{rows}</tbody></table>'
            '<p class="nhs-body-s nhs-secondary" style="margin:16px 0 0">Showing the 8 patients with notes evidence. '
-           'The full log also lists the 63 ruled out by the SQL record checks , the 96 ruled out by notes screening and the 29 not shortlisted in the final review.</p></div>')
+           'The full log also lists the 4 on a do-not-contact list, the 59 ruled out by the SQL record checks, the 96 ruled out by notes screening and the 29 not shortlisted in the final review.</p></div>')
         st.download_button("Download screening log (CSV)", "\n".join(csv), f"{trial['id']}-screening-log.csv")
+
+    dnc = "".join(f'<tr><td><strong>{x["patient_id"]}</strong></td><td>{html.escape(x["reason"])}</td></tr>' for x in data.DO_NOT_CONTACT)
+    md('<h2 class="nhs-heading-m" style="margin-top:32px">Not screened</h2>'
+       f'<p class="nhs-body">{len(data.DO_NOT_CONTACT)} patients were left out before any checks, so their notes were never read.</p>'
+       f'<table class="nhs-table"><thead><tr><th>Patient</th><th>Reason</th></tr></thead><tbody>{dnc}</tbody></table>')
 
     md('<h2 class="nhs-heading-m" style="margin-top:32px">Audit trail</h2>'
        '<p class="nhs-body">Every search and every decision, with who made it and when. Entries cannot be edited.</p>')
