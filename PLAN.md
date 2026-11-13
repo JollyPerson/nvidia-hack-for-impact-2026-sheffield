@@ -1,134 +1,156 @@
-# TrialMatch: build plan
+# TrialMatch: revised build plan (v2, 11:15)
 
-**NVIDIA Hack for Impact, Sheffield. Fri 13 Nov 2026. Submit by 18:00.**
-Track: **Public Services**.
+**NVIDIA Hack for Impact, Sheffield. Fri 13 Nov 2026. Submit by 18:00.** Track: **Public Services**.
+This version adopts Saif's architecture. Each decision below says *why*, so the team can defend it to judges.
 
-## One-line pitch
+## Pitch
 
-Clinical trials fail to recruit because the criteria that matter ("no GP visit in 12 months", "history of autoimmune thyroiditis") are buried in free-text GP notes. TrialMatch is a local agent on a DGX Spark. It reads a trial's eligibility text, screens a GP practice's patient records, and gives a recruiter a ranked shortlist where every decision cites the line in the note it came from. **Patient data never leaves the box.**
+Clinical trials fail to recruit because the criteria that matter ("not seen by GP in 12 months", "hx of autoimmune thyroiditis") are buried in free-text GP notes. TrialMatch lets a clinician at an NHS trust set up a trial. It finds patients with a SQL query over the trust's data warehouse, then a two-model LLM cascade on a DGX Spark reads every candidate's notes. A validation layer checks every citation against the real record, and the clinician gets a reviewed shortlist. **Patient data never leaves the box.**
 
-## How we hit the judging criteria
-
-| Criterion | What we show |
-|---|---|
-| Impact | Most trials miss their recruitment targets. A GP practice can screen its whole list for a trial in minutes instead of a nurse spending days on chart review. |
-| Technical execution (agentic + local) | A multi-step agent with tool calls and a live trace, running an open model on the Spark. Show the throughput figure (notes/min) and show that no network is needed. |
-| Feasibility | Inputs are a ClinicalTrials.gov ID and an EHR export (CSV/FHIR). A human approves every match. The data-governance story is on-prem in the practice or trust. |
-
-## Architecture
+## Architecture (Saif's flow)
 
 ```
-ClinicalTrials.gov API ──► [1 Criteria agent] ──► criteria.json
-                                                 (structured | free-text)
-                                                        │
-patients.csv (Synthea) ─► [2 Structured filter] ◄───────┤   pandas/SQL, no LLM
-                                │ candidates            │
-notes/ (GP free text) ─► [3 Evidence retriever] ◄───────┤   embeddings, top-k snippets per criterion
-                                │                       │
-                         [4 Notes judge agent] ◄────────┘   per patient × criterion → MET / NOT_MET / UNKNOWN + quote
-                                │
-                         [5 Ranker + explainer] ──► Streamlit UI (trace, shortlist, evidence, approve/reject)
+[1] NHS-themed front end ── clinician creates trial (paste criteria or import NCT ID)
+        │
+[2] Criteria parser (LLM 2, once per trial) ─► criteria.json  (structured | free_text)
+        │
+[3] SQL builder ─► read-only SELECT ─► [4] Mock data warehouse (DuckDB)
+        │                                         │
+        │                     filtered patient rows + their notes
+        ▼                                         ▼
+[5] LLM cascade
+     LLM 1 "fast prefill" : small model, reads every candidate's notes row by row,
+                            one verdict per (patient, criterion) + quote, shortlists
+     LLM 2 "fast decode"  : MoE model, reviews the shortlist only, finalises
+                            the ranking, writes the manifest (explanations + citations)
+        │
+[6] Validation layer ─── every quote must exist in that patient's note; every
+        │                record claim must match the warehouse; else → UNKNOWN
+[7] Clinician review ─── approve / reject per patient → contact list for enrolment
 ```
 
-Everything runs on the Spark. The LLM is served behind an OpenAI-compatible endpoint, so any team member's code calls `http://spark:8000/v1`.
+## Decisions and why
 
-## Stack
+### 1. Data warehouse: DuckDB with a fixed NHS-style schema
+**Why:** NHS trusts hold this data in SQL warehouses, so showing a SQL step makes the feasibility story concrete: "this plugs into what you already have." DuckDB is a single file and a pip install, loads Synthea CSVs in one line, and has a read-only mode. Postgres would cost setup time for no demo benefit.
 
-- **LLM serving:** vLLM (or the NIM container if it is quick to pull) with an OpenAI-compatible API. If vLLM causes trouble, fall back to Ollama.
-  - **Main model:** a mid-size open instruct model that fits easily in 128 GB, e.g. Llama 3.3 70B Instruct in FP8/AWQ or gpt-oss-120b. It handles criteria parsing (one call per trial, so it can be slow).
-  - **Fast model:** Nemotron Nano 9B v2 or Llama 3.1 8B Instruct for the per-patient notes judge, since that runs many times.
-  - Decide by 10:45 depending on what downloads and loads fastest. If time is short, use a single 8B model for everything.
-- **Embeddings:** a small sentence-embedding model (e.g. `nvidia/llama-nemoretriever` family or `bge-small`) with numpy cosine similarity. No vector DB is needed for about 200 patients.
-- **Structured output:** JSON schema / guided decoding in vLLM (`guided_json`) so agent outputs always parse.
-- **Agent glue:** plain Python. LangGraph only if someone already knows it well. No time to learn frameworks today.
-- **UI:** Streamlit.
-- **Language:** Python 3.11. One `requirements.txt`.
+Schema, frozen at 11:45 (agree it before anyone writes queries):
+```
+patients(patient_id, nhs_number_mock, sex, birth_date, postcode_district, smoker)
+observations(patient_id, date, code, name, value, unit)     -- height, weight, BMI, eGFR...
+conditions(patient_id, onset_date, resolved_date, snomed_code, name)
+encounters(patient_id, date, type)                           -- GP visits
+notes(note_id, patient_id, date, author_role, text)          -- free-text GP notes
+v_patient_summary(patient_id, age, sex, bmi, last_gp_visit, ...)  -- view used by the SQL builder
+```
+
+### 2. SQL generation: criteria → JSON → *compiled* SQL, not free-form LLM SQL
+**Why:** SQL written by an LLM can be wrong or unsafe, and a wrong filter silently drops eligible patients, which is exactly the failure we're trying to fix. Instead, the parser emits structured criteria (`{field: "age", op: ">=", value: 18}`) and plain Python compiles them into a parameterised `SELECT` against `v_patient_summary`. That's deterministic, testable, and still "software constructs a SQL query" as in Saif's diagram.
+- Connection opened with `read_only=True`. Only `SELECT` statements are run.
+- **The UI shows the generated SQL** and how many patients each clause removes (the funnel). Judges can read and check it.
+- **Stretch only:** LLM-written SQL for criteria the compiler can't map, validated with `sqlglot` (single SELECT, allowed tables only) before running.
+
+### 3. Notes go to the LLMs, not to SQL
+**Why:** the niche criteria are in free text, and SQL `LIKE` is just keyword search, which is our baseline to beat. SQL narrows the candidates on hard facts (age, BMI, sex, diagnosis codes). The LLMs read the notes for the rest.
+
+### 4. The cascade: small model screens everyone, MoE model finalises
+This is Saif's "fast prefill / fast decode" split. Here is the honest version for judges:
+- **LLM 1 (prefill-heavy job):** reads *every* candidate's notes (lots of input tokens) and writes a tiny JSON verdict. The work is dominated by prefill, which is compute-bound and where the GB10 Blackwell GPU is strong. Use a **small model, e.g. Nemotron Nano 9B v2 or Llama 3.1 8B**, batched with async requests (vLLM continuous batching).
+  **Why small:** it runs (candidates × criteria) times, so speed matters more than depth.
+- **LLM 2 (decode-heavy job):** reads only the shortlist and writes long output (rankings, explanations, the manifest). Decode is limited by memory bandwidth (~273 GB/s on the Spark), so a dense 70B model would generate only a few tokens/s. Use an **MoE model such as gpt-oss-120b** (about 5B parameters active per token): large-model quality with small-model decode speed. It also parses the criteria once at the start.
+  **Why this split:** expensive reasoning runs only on the ~10–20% of patients who survive LLM 1. It fits in 128 GB together (gpt-oss-120b ≈ 65 GB + 9B ≈ 18 GB in FP8, plus KV cache).
+- **Fallback:** if gpt-oss-120b won't download or load by 12:30, use gpt-oss-20b or the same small model for both roles. The architecture and the story stay the same.
+- **Say "prefill-heavy / decode-heavy *stage*"**, not "prefill model". It is accurate, and back it with the measured tokens/s per stage on the trace screen.
+
+### 5. Drop the embedding retriever from v1
+**Why:** Saif's flow has LLM 1 read the patient's notes row by row. With 3–6 short notes per patient that's 1–2k tokens, so the whole history fits in context. A retriever adds a component that can miss evidence and costs build time. It's the first thing to add if we scale to real records.
+
+### 6. Validation layer is a separate step, not part of the prompt
+**Why:** judges will ask "does it hallucinate?" Prompts can't guarantee that; code can. After the cascade:
+- **Quote grounding:** each MET/NOT_MET must carry a quote that appears verbatim (whitespace-normalised) in *that patient's* note with that `note_id`. Otherwise downgrade to UNKNOWN.
+- **Record grounding:** any fact the manifest states from structured data (age, BMI, last visit) is re-read from DuckDB and must match.
+- **Manifest schema:** pydantic model; every patient on the manifest must have passed SQL and LLM 1.
+- Log every downgrade. Headline: "**0 unverified citations reached the clinician** (N caught)."
+
+### 7. Clinician review is the decision point
+**Why:** feasibility and safety. This is decision support: the tool proposes and cites, and a clinician approves before anyone is contacted. UNKNOWN is shown as "needs checking", not hidden. The existing UI already has approve/reject.
+
+### 8. Keep the existing Streamlit UI and its mock-data seam
+**Why:** it's built and already NHS-styled (`app/`, screenshots in `docs/mockups/`). `app/mock_data.py` exposes `get_trials()`, `get_criteria()` and `get_run()`. The real pipeline returns the same shapes, so the UI and backend can be built in parallel. Additions needed:
+- a **"Create trial" form** (title, criteria text or NCT ID), Saif's step 1
+- a **SQL panel** on the trace tab showing the compiled query and the per-clause funnel
+- **trace rows for LLM 1, LLM 2 and Validation**, each with tokens/s
+- a **"Download manifest"** button (JSON/CSV)
+
+### 9. Evaluation as in VALIDATION.md
+**Why:** "it works on our demo" doesn't persuade judges. Planted facts give free ground truth. Precision/recall per criterion against a keyword baseline (which is what SQL `LIKE` or Ctrl-F does) is the headline chart. Broken down by negation, abbreviation, temporal and family-history distractors, it shows *why* the LLM beats keyword search. See [VALIDATION.md](VALIDATION.md). Ask now: the note generator must log planted facts **before** notes are generated.
 
 ## Data
 
-1. **Patients:** Synthea, about 200 patients, CSV export (`patients.csv`, `conditions.csv`, `observations.csv`, `encounters.csv`). Flatten to one row per patient: age, sex, height, weight, BMI, smoker, key condition codes, last encounter date.
-   - Fallback if the Java setup is slow: generate the same table with a Python script using Faker and plausible distributions.
-2. **GP notes:** generate 3 to 6 short consultation notes per patient with the fast model on the Spark, seeded from that patient's structured facts. **Deliberately plant niche facts that exist only in the notes**: last GP visit, family history, prior chemo, pregnancy plans, rare diagnoses, mentions like "pt declines statins", negations ("no hx of MI"), and abbreviations (hx, SOB, T2DM). Plant them so we know the ground truth for evaluation.
-3. **Trials:** 3 real oncology trials from the ClinicalTrials.gov API v2 (`https://clinicaltrials.gov/api/v2/studies/{NCT_ID}`, field `protocolSection.eligibilityModule`). Pick ones with a mix of numeric criteria and fuzzy ones. Cache the JSON in `data/trials/` so the demo works offline.
-4. **Ground truth:** a `labels.csv` of about 30 patients × 1 trial, filled in partly from the planted facts and partly by hand.
+1. **Patients:** Synthea (~200) loaded into DuckDB. Faker-based Python generator as a fallback if Java is slow.
+2. **Notes:** generated per patient on the Spark (3–6 UK GP-style notes), planting niche facts and distractors. Writes `data/labels_planted.jsonl` at the same time. Use LLM 2 to write and LLM 1 to judge, to reduce circularity.
+3. **Trials:** 3 oncology trials from the ClinicalTrials.gov API v2, cached in `data/trials/` for offline demos. The front end can also accept typed criteria.
 
-## Agent steps (contracts)
+## Team (4)
 
-1. **Criteria agent:** `trial_text → [{id, text, type: inclusion|exclusion, kind: structured|free_text, field?, op?, value?}]`. Structured items map to columns (age, BMI, sex). Everything else is free text.
-2. **Structured filter:** pure pandas. Logs how many patients each criterion removes, which feeds a funnel chart in the UI.
-3. **Evidence retriever:** for each (patient, free-text criterion), return the top 3 note snippets by embedding similarity, plus a keyword match.
-4. **Notes judge:** `(criterion, snippets) → {status, quote, confidence}`. Must quote verbatim or return UNKNOWN. Batch with async requests to keep the Spark busy.
-5. **Ranker:** exclude anyone with an exclusion criterion MET. Score = inclusion criteria met, minus unknowns. Produce a one-line explanation per patient.
+Suggested owners. Swap names as you like; Saif is the obvious owner of the NHS data side.
 
-Every step writes to a shared `trace` list. The UI streams it so judges can see the agent work.
+| Role | Owner | Owns | Done by 12:30 | Afternoon |
+|---|---|---|---|---|
+| A: Models + cascade | ? | vLLM serving both models, LLM 1 screener, LLM 2 finaliser and criteria parser, batching | Both endpoints answer, LLM 1 verdict on one patient | Cascade end to end, tokens/s per stage, prompt tuning |
+| B: Data + eval | ? | Synthea, note generator with planted labels, trial cache, keyword baseline, eval script | Notes + `labels_planted.jsonl` generated | Eval numbers and chart (15:00–16:00) |
+| C: Warehouse + SQL + validation | **Saif** | DuckDB schema and load, SQL compiler, read-only runner, validation layer | Schema frozen 11:45, SQL returns candidates for trial 1 | Validation layer, record grounding, manifest schema |
+| D: Front end + pitch | ? | Streamlit additions (create trial, SQL panel, cascade trace, manifest download), slides, backup video | Create-trial form + SQL panel on mocks | Wire to real pipeline, slides, video |
 
-## Demo UI (Streamlit)
+**Contracts to agree at 11:30:** `criteria.json` (already in `mock_data.py`), the SQL builder's output (`{sql, params, funnel}`), the LLM 1 verdict (`{patient_id, criterion_id, status, quote, note_id, confidence}`), and the manifest format.
 
-1. Paste an NCT ID (or pick from 3 cached trials), then press **Find patients**.
-2. Live agent trace panel showing each step, tool call and timing.
-3. Funnel: 200 patients → N after structured filter → M likely eligible.
-4. Shortlist table: patient, score, status chips per criterion.
-5. Click a patient to see each criterion with the highlighted quote from the note, plus **Approve / Reject** buttons.
-6. Footer badge: "Model: X on DGX Spark · 0 bytes sent off-device · N notes/min".
-
-## Evaluation (for the pitch)
-
-On the 30 labelled patients, compare:
-- **Keyword baseline** (ctrl-F style search over notes)
-- **TrialMatch**
-
-Report precision, recall and time per patient. One slide, one chart.
-
-## Team split
-
-**Decision needed: team size.** The split below is for 4. With 3 people, merge the Data and Eval roles. With 5, give the UI its own owner and have a fifth person own the pitch/video.
-
-| Person | Owns | Morning | Afternoon |
-|---|---|---|---|
-| A: Infra + agents lead | Spark, model serving, criteria agent, notes judge | vLLM up, models loaded, endpoint shared by 10:45 | Notes judge batching, speed, prompt tuning |
-| B: Data | Synthea, note generator, trial fetcher | Patients + trials cached by 11:30, notes by 12:30 | Labels, eval script, baseline |
-| C: Pipeline | Structured filter, retriever, ranker, trace | Filter + retriever on stub data | Wire end to end, caching for demo |
-| D: UI + pitch | Streamlit app, slides, video | UI on mocked JSON (no waiting for the backend) | Plug in real pipeline, pitch deck, backup video |
-
-Agree the JSON contracts above at 10:15 so everyone can build against mocks in parallel.
-
-## Timeline
+## Timeline (from 11:15)
 
 | Time | Milestone |
 |---|---|
-| 09:55–10:15 | Agree plan, roles, JSON contracts. Ask organisers about the submission format. |
-| 10:15–10:45 | Spark up. Model downloading. Repo skeleton. Synthea running. |
-| 10:45 | **Checkpoint 1:** LLM endpoint answers. Trials cached. |
-| 10:45–12:30 | Criteria agent, filter, retriever built on stubs. Notes generated. UI on mocks. |
-| 12:30 | **Checkpoint 2:** one trial runs end to end on real data, however ugly. |
-| 12:30–13:00 | Lunch. |
-| 13:00–15:00 | Notes judge quality + speed, ranker, UI wired to real pipeline, trace streaming. |
-| 15:00 | **Checkpoint 3: feature freeze.** No new features after this. |
-| 15:00–16:00 | Eval vs baseline, cache demo results, fix bugs. |
+| 11:15–11:30 | Read this plan together. Confirm owners. Keep anything already running (model downloads, Synthea). |
+| 11:30–11:45 | Agree JSON contracts and freeze the DuckDB schema. |
+| 11:45–12:30 | Warehouse loaded. SQL compiler on trial 1. LLM 1 on one patient. Notes generating. UI additions on mocks. |
+| **12:30** | **Checkpoint 1:** SQL → candidates → LLM 1 verdicts on real data for one trial, however rough. gpt-oss-120b loaded or fallback chosen. |
+| 12:30–13:00 | Lunch (keep note generation running). |
+| 13:00–14:30 | LLM 2 finaliser + manifest. Validation layer. UI wired to `get_run()`. |
+| **14:30** | **Checkpoint 2:** full flow from create trial to clinician review, end to end. |
+| 14:30–15:00 | Bug fixes. Cache demo results for replay mode. |
+| **15:00** | **Feature freeze.** |
+| 15:00–16:00 | Eval vs keyword baseline. Throughput and stopwatch hand-screen numbers. |
 | 16:00–17:00 | Slides, 2-minute backup video, README. |
-| 17:00–17:30 | Two full rehearsals of the demo. |
+| 17:00–17:30 | Two full demo rehearsals. |
 | 17:30–18:00 | Buffer. Submit. |
 
-## Scope cuts if behind (in this order)
+## Cut list if behind (in order)
 
-1. Drop the second model; use the 8B for everything.
-2. Drop embeddings; send all of a patient's notes to the judge (they're short).
-3. Drop live NCT ID entry; use the 3 cached trials.
-4. Drop the eval; show 3 hand-checked examples instead.
+1. LLM 2 → use the small model for both stages (keep the two-stage flow).
+2. NCT import → typed criteria plus the 3 cached trials only.
+3. Record grounding → keep quote grounding only.
+4. Per-style eval breakdown → overall precision/recall only.
+5. Last resort: replay mode with pre-computed results for the live demo.
 
 ## Risks
 
-- **Model download time on venue Wi-Fi.** Start the download first thing. Have an 8B model as a fallback.
-- **Notes look obviously synthetic.** Give the generator a few realistic example notes in UK GP style.
-- **Demo latency.** Pre-compute results for the demo trial and keep a "replay" mode.
-- **Overclaiming.** Say clearly that this is decision support for recruiters, not an eligibility decision, and that the data is synthetic.
+- **Model downloads on venue Wi-Fi:** start the gpt-oss-120b download now. The small model is the fallback.
+- **Two models sharing 128 GB:** set vLLM `--gpu-memory-utilization` per server (e.g. 0.55 and 0.2) so they don't fight over memory.
+- **"Prefill/decode" challenged by judges:** use the stage wording above, backed by measured numbers.
+- **Synthetic data:** say it clearly. Next step is real notes (n2c2 2018 cohort selection, needs a data-use agreement) and a silent pilot at a GP practice.
 
-## Repo layout (proposed)
+## Repo layout
 
 ```
-app/            streamlit UI
-agent/          criteria.py, filter.py, retrieve.py, judge.py, rank.py, llm.py
-data/           trials/, synthea/, notes/, labels.csv
-scripts/        fetch_trials.py, gen_notes.py, eval.py
-PLAN.md
+app/                 Streamlit UI (exists); mock_data.py is the seam
+pipeline/
+  warehouse.py       DuckDB load + read-only connection
+  sql_builder.py     criteria.json -> parameterised SELECT + funnel
+  llm.py             OpenAI-compatible clients for LLM 1 and LLM 2
+  criteria.py        LLM 2: eligibility text -> criteria.json
+  screen.py          LLM 1: per patient x criterion verdicts
+  finalise.py        LLM 2: shortlist -> ranked manifest
+  validate.py        quote + record grounding, manifest schema
+  run.py             orchestrates and returns get_run() shape
+scripts/             fetch_trials.py, gen_notes.py, eval.py
+data/                trials/, synthea/, warehouse.duckdb, labels_planted.jsonl
+PLAN.md  VALIDATION.md
 ```
