@@ -1,0 +1,168 @@
+"""Tests for src/validation.py, using a small in-memory warehouse built from data/schema.sql."""
+
+import sqlite3
+from pathlib import Path
+
+import pytest
+
+from src.models import (
+    Citation,
+    CriterionAssessment,
+    FlagType,
+    PatientResult,
+    Verdict,
+)
+from src.validation import check_citation, validate_patient
+
+SCHEMA = Path(__file__).resolve().parent.parent / "data" / "schema.sql"
+
+
+@pytest.fixture
+def conn():
+    db = sqlite3.connect(":memory:")
+    db.row_factory = sqlite3.Row
+    db.executescript(SCHEMA.read_text())
+    db.executescript(
+        """
+        INSERT INTO Patients VALUES ('P1', '1950-03-02', 'F', 'A', 'S10');
+        INSERT INTO Patients VALUES ('P2', '1962-07-19', 'M', 'A', 'S11');
+
+        INSERT INTO Inpatients VALUES ('E1', 'P1', '2026-10-01T08:00:00', NULL, 'Emergency', 'Respiratory', 'Ward 5');
+        INSERT INTO Inpatients VALUES ('E2', 'P2', '2026-10-03T09:00:00', NULL, 'Emergency', 'Respiratory', 'Ward 6');
+
+        INSERT INTO ClinicalNotes VALUES ('N1', 'E1', 'P1', 'clerking', 'FY1', '2026-10-01T09:00:00',
+            'COPD on home O2 2L via concentrator.
+             No hx of MI.');
+        INSERT INTO ClinicalNotes VALUES ('N2', 'E2', 'P2', 'clerking', 'FY1', '2026-10-03T10:00:00',
+            'Known T2DM. Lives alone.');
+
+        INSERT INTO Observations (ObservationID, EncounterID, LocalPatientIdentifier, RecordedDateTime,
+            RespRate, SpO2, OnOxygen, HeartRate)
+            VALUES ('O1', 'E1', 'P1', '2026-10-01T08:30:00', 24, 92, 1, 104);
+
+        INSERT INTO Pathology VALUES ('L1', 'E1', 'P1', 'CRP', 'C-reactive protein', 145.0, 'mg/L', 0, 5,
+            '2026-10-01T08:40:00');
+
+        INSERT INTO Diagnoses VALUES ('D1', 'E1', 'P1', 'J18.9', 'Pneumonia, unspecified', 'primary');
+        """
+    )
+    yield db
+    db.close()
+
+
+def cite(table, record_id, field, quote):
+    return Citation(table=table, record_id=record_id, field=field, quote=quote)
+
+
+# --- check_citation: genuine evidence passes ---------------------------------
+
+
+@pytest.mark.parametrize(
+    "citation",
+    [
+        cite("ClinicalNotes", "N1", "NoteText", "home O2 2L via concentrator"),
+        cite("ClinicalNotes", "N1", "NoteText", "HOME   o2 2l\nvia CONCENTRATOR"),  # case and spacing ignored
+        cite("ClinicalNotes", "N1", "NoteText", "concentrator. No hx of MI"),  # spans a line break
+        cite("Observations", "O1", "SpO2", "SpO2 92%"),
+        cite("Observations", "O1", "SpO2", "92"),
+        cite("Pathology", "L1", "Value", "CRP 145 mg/L"),
+        cite("Diagnoses", "D1", "Description", "pneumonia"),
+        cite("Patients", "P1", "DateOfBirth", "1950-03-02"),
+    ],
+)
+def test_genuine_citation_passes(conn, citation):
+    assert check_citation(conn, citation, "P1") is None
+
+
+# --- check_citation: invented or wrong evidence fails ------------------------
+
+
+@pytest.mark.parametrize(
+    "citation, reason",
+    [
+        (cite("ClinicalNotes", "N999", "NoteText", "home O2"), "record does not exist"),
+        (cite("ClinicalNotes", "N2", "NoteText", "Known T2DM"), "record belongs to a different patient"),
+        (cite("ClinicalNotes", "N1", "NoteText", "home O2 3L via concentrator"), "quote does not match the record"),
+        (cite("ClinicalNotes", "N1", "NoteText", "no"), "quote does not match the record"),
+        (cite("Observations", "O1", "SpO2", "SpO2 88%"), "quote does not match the record"),
+        (cite("Observations", "O1", "Temperature", "37.2"), "field is missing or empty"),
+        (cite("Observations", "O1", "MadeUpField", "1"), "field is missing or empty"),
+        (cite("PatientContacts", "P1", "MobileNumber", "07700 900123"), "this table cannot be cited"),
+        (cite("Medications", "M1", "Drug", "salbutamol"), "this table cannot be cited"),
+    ],
+)
+def test_bad_citation_fails(conn, citation, reason):
+    assert check_citation(conn, citation, "P1") == reason
+
+
+# --- validate_patient: flags, never removes ----------------------------------
+
+
+def verdict(value, *citations):
+    return Verdict(verdict=value, reasoning="test", citations=list(citations))
+
+
+def test_valid_patient_gets_no_flags(conn):
+    good = cite("ClinicalNotes", "N1", "NoteText", "home O2 2L")
+    result = PatientResult(
+        study_id="S1",
+        patient_id="P1",
+        assessments=[CriterionAssessment(criterion_id="C1", stage1=verdict("met", good), stage2=verdict("met", good))],
+    )
+    out = validate_patient(conn, result)
+    assert out.assessments[0].flags == []
+
+
+def test_bad_citation_is_flagged_with_its_stage(conn):
+    good = cite("ClinicalNotes", "N1", "NoteText", "home O2 2L")
+    fake = cite("ClinicalNotes", "N999", "NoteText", "home O2 2L")
+    result = PatientResult(
+        study_id="S1",
+        patient_id="P1",
+        assessments=[CriterionAssessment(criterion_id="C1", stage1=verdict("met", good), stage2=verdict("met", fake))],
+    )
+    flags = validate_patient(conn, result).assessments[0].flags
+    assert len(flags) == 1
+    assert flags[0].type == FlagType.citation_failed
+    assert flags[0].stage == 2
+    assert "N999" in flags[0].detail
+
+
+def test_disagreement_is_flagged(conn):
+    good = cite("ClinicalNotes", "N1", "NoteText", "No hx of MI")
+    result = PatientResult(
+        study_id="S1",
+        patient_id="P1",
+        assessments=[
+            CriterionAssessment(criterion_id="C1", stage1=verdict("met", good), stage2=verdict("not_met", good))
+        ],
+    )
+    flags = validate_patient(conn, result).assessments[0].flags
+    assert [f.type for f in flags] == [FlagType.stage_disagreement]
+
+
+def test_not_shortlisted_and_insufficient_are_handled(conn):
+    # Stage 2 never ran (not shortlisted), and an `insufficient` verdict has no citations.
+    result = PatientResult(
+        study_id="S1",
+        patient_id="P1",
+        assessments=[CriterionAssessment(criterion_id="C1", stage1=verdict("insufficient"), stage2=None)],
+    )
+    assert validate_patient(conn, result).assessments[0].flags == []
+
+
+def test_nothing_is_removed(conn):
+    fake = cite("ClinicalNotes", "N2", "NoteText", "Known T2DM")  # another patient's note
+    result = PatientResult(
+        study_id="S1",
+        patient_id="P1",
+        assessments=[
+            CriterionAssessment(criterion_id="C1", stage1=verdict("met", fake)),
+            CriterionAssessment(criterion_id="C2", stage1=verdict("insufficient")),
+        ],
+    )
+    out = validate_patient(conn, result)
+    assert out.patient_id == "P1"
+    assert [a.criterion_id for a in out.assessments] == ["C1", "C2"]
+    assert out.assessments[0].stage1.verdict.value == "met"  # verdict untouched, only flagged
+    assert out.assessments[0].flags[0].type == FlagType.citation_failed
