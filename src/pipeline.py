@@ -19,7 +19,7 @@ from typing import Callable
 
 import config
 from src.decide import decide
-from src.llm import LLM
+from src.llm import LLM, reasoning_on
 from src.models import CriterionAssessment, FinalStatus, PatientResult, ScreeningRun, Study, Verdict, VerdictValue
 from src.prefilter import connect_readonly, run_prefilter
 from src.screening import screen_patient
@@ -187,11 +187,13 @@ def run_screening(
         # With patients in parallel the stages overlap, so split the wall time by each model's share of the work.
         total = (timed.seconds["screener"] + timed.seconds["verifier"]) or 1.0
         emit(_step(2, "done", f"Checked {n_notes} notes criteria for {len(results)} candidates, one call per "
-                              f"criterion, {workers} patients at a time. Shortlisted {run.shortlisted_stage1}."
+                              f"criterion, {workers} patients at a time. Shortlisted {run.shortlisted_stage1}. "
+                              f"Reasoning {'on' if reasoning_on('screener') else 'off'}."
                               + (f" {errors} model calls failed and count as insufficient." if errors else ""),
                    wall * timed.seconds["screener"] / total, config.SCREENER_MODEL))
         emit(_step(3, "done", f"Independently re-read the records of the {run.shortlisted_stage1} shortlisted "
-                              f"patients. Stages 1 and 2 took {wall:.0f}s together.",
+                              f"patients. Stages 1 and 2 took {wall:.0f}s together. "
+                              f"Reasoning {'on' if reasoning_on('verifier') else 'off'}.",
                    wall * timed.seconds["verifier"] / total, config.VERIFIER_MODEL))
 
         # 4. Validation: model citations only (code-made citations come from the warehouse itself)

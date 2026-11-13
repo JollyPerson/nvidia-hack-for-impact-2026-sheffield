@@ -14,8 +14,9 @@ const A = {
   async devPanel() {
     const box = document.getElementById("adv-dev");
     if (!box) return;
-    let rows;
-    try { rows = await A.api("/api/dev/features"); } catch (e) { return; } // 404 = developer mode is off
+    let rows, models;
+    try { [rows, models] = await Promise.all([A.api("/api/dev/features"), A.api("/api/dev/models")]); }
+    catch (e) { return; } // 404 = developer mode is off
     box.classList.remove("adv-hidden");
     box.innerHTML = `<div class="nhsuk-form-group"><fieldset class="nhsuk-fieldset" aria-describedby="adv-dev-hint">
       <legend class="nhsuk-fieldset__legend nhsuk-fieldset__legend--s">${A.tag("Developer mode", "yellow")} Features</legend>
@@ -24,6 +25,14 @@ const A = {
         <input class="nhsuk-checkboxes__input" id="dev-${r.name}" type="checkbox" data-feature="${r.name}"${r.enabled ? " checked" : ""} aria-describedby="dev-${r.name}-hint">
         <label class="nhsuk-label nhsuk-checkboxes__label" for="dev-${r.name}">${A.esc(A.FEATURE_TITLES[r.name] || r.name)}</label>
         <div class="nhsuk-hint nhsuk-checkboxes__hint" id="dev-${r.name}-hint">${A.esc(r.label)}. Set by ${A.esc(r.source)}.</div></div>`).join("")}</div>
+      </fieldset></div>
+      <div class="nhsuk-form-group"><fieldset class="nhsuk-fieldset" aria-describedby="adv-dev-models-hint">
+      <legend class="nhsuk-fieldset__legend nhsuk-fieldset__legend--s">Model reasoning</legend>
+      <div class="nhsuk-hint" id="adv-dev-models-hint">Let a model think before it answers. Slower (about 30 times on a short question) and uses more output tokens. Applies to the next screening run. Deploy setting: LLM_REASONING, SCREENER_REASONING, VERIFIER_REASONING.</div>
+      <div class="nhsuk-checkboxes adv-dev-grid">${models.map(m => `<div class="nhsuk-checkboxes__item">
+        <input class="nhsuk-checkboxes__input" id="dev-reason-${m.role}" type="checkbox" data-role="${m.role}"${m.reasoning ? " checked" : ""} aria-describedby="dev-reason-${m.role}-hint">
+        <label class="nhsuk-label nhsuk-checkboxes__label" for="dev-reason-${m.role}">${m.role === "screener" ? "Screener" : "Verifier"} reasoning</label>
+        <div class="nhsuk-hint nhsuk-checkboxes__hint" id="dev-reason-${m.role}-hint">${A.esc(m.model)}, up to ${m.max_output_tokens} output tokens. Set by ${A.esc(m.source)}.</div></div>`).join("")}</div>
       </fieldset></div>
       <button class="nhsuk-button nhsuk-button--secondary nhsuk-button--small" type="button" id="adv-dev-reset">Use deploy settings</button>`;
     const apply = async (method, body) => {
@@ -34,6 +43,10 @@ const A = {
     };
     box.querySelectorAll("[data-feature]").forEach(cb => cb.addEventListener("change", () =>
       apply("POST", { name: cb.dataset.feature, enabled: cb.checked })));
+    box.querySelectorAll("[data-role]").forEach(cb => cb.addEventListener("change", async () => {
+      await A.api("/api/dev/models", { method: "POST", body: JSON.stringify({ role: cb.dataset.role, reasoning: cb.checked }) });
+      A.devPanel();
+    }));
     document.getElementById("adv-dev-reset").addEventListener("click", () => apply("DELETE"));
   },
   esc(s) {

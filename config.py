@@ -37,6 +37,17 @@ SEED = 42
 # Ask the server not to "think" out loud: thinking burns the 8k budget.
 # Set REASONING_EFFORT="" to send nothing.
 REASONING_EFFORT = os.getenv("REASONING_EFFORT", "none")
+# Reasoning ("thinking") per role: off (default) sends REASONING_EFFORT ("none") on every call;
+# on lets the model think. LLM_REASONING sets both; SCREENER_/VERIFIER_REASONING win over it.
+# The web app's developer mode can override these at runtime (src/llm.py REASONING_OVERRIDES).
+REASONING = {
+    role: (os.getenv(f"{role.upper()}_REASONING") or os.getenv("LLM_REASONING") or "off").strip().lower()
+    in {"on", "true", "1", "yes"}
+    for role in ("screener", "verifier")
+}
+# Thinking uses output tokens before the answer, so allow more when it is on (Qwen came back
+# empty at 300 tokens). The prompt budget shrinks to match (8,192 total per request).
+REASONING_MAX_OUTPUT_TOKENS = int(os.getenv("REASONING_MAX_OUTPUT_TOKENS", "4096"))
 
 # --- Token budget (organiser hard limit: 8,192 tokens per request) -------------
 CONTEXT_TOKENS = 8192

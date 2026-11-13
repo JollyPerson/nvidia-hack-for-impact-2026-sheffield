@@ -257,3 +257,19 @@ def test_dev_mode_off_hides_toggles_and_ignores_overrides(monkeypatch):
     assert client.get("/api/dev/features").status_code == 404
     assert client.post("/api/dev/features", json={"name": "what_if", "enabled": True}).status_code == 404
     assert client.get("/api/features").json()["what_if"] is False
+
+
+def test_dev_reasoning_toggle(monkeypatch):
+    from src import llm as llm_mod
+    monkeypatch.setattr(llm_mod, "REASONING_OVERRIDES", {})
+    rows = {m["role"]: m for m in client.get("/api/dev/models").json()}
+    assert rows["screener"]["reasoning"] is False and rows["verifier"]["reasoning"] is False
+    rows = {m["role"]: m for m in client.post("/api/dev/models", json={"role": "verifier", "reasoning": True}).json()}
+    assert rows["verifier"]["reasoning"] is True and rows["verifier"]["source"] == "developer toggle"
+    assert rows["verifier"]["max_output_tokens"] > rows["screener"]["max_output_tokens"]
+    assert client.get("/api/health").json()["reasoning"] == {"screener": False, "verifier": True}
+    client.delete("/api/dev/features")
+    assert client.get("/api/health").json()["reasoning"]["verifier"] is False
+    assert client.post("/api/dev/models", json={"role": "nope", "reasoning": True}).status_code == 422
+    monkeypatch.setenv("ADVOLARE_DEV_MODE", "false")
+    assert client.get("/api/dev/models").status_code == 404

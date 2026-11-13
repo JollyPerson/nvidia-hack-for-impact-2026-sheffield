@@ -29,6 +29,7 @@ from api import extras, features, mock_data
 from api.schemas import (Contact, DecisionRequest, DecisionResponse, DecisionValue, DraftRequest, DraftResponse,
                          Funnel, PatientView, RunView, StudySummary, TraceStep)
 from data import seed_studies
+from src import llm as llm_mod
 from src import pipeline, store
 from src.models import AuditEntry, CriterionKind, Decision, PatientResult, ScreeningRun, Study
 from src.prefilter import PrefilterError, parse_value
@@ -476,12 +477,45 @@ def dev_toggle(body: FeatureToggle):
 @app.delete("/api/dev/features", dependencies=[Depends(features.require_dev_mode)])
 def dev_reset():
     features.clear_overrides()
+    llm_mod.REASONING_OVERRIDES.clear()
     return features.describe()
+
+
+class ReasoningToggle(BaseModel):
+    role: str  # "screener" or "verifier"
+    reasoning: bool | None  # None = back to the env setting
+
+
+def _models():
+    return [{"role": role, "model": config.MODELS[role], "reasoning": llm_mod.reasoning_on(role),
+             "max_output_tokens": llm_mod.max_output_tokens(role),
+             "source": "developer toggle" if role in llm_mod.REASONING_OVERRIDES else
+             f"{role.upper()}_REASONING / LLM_REASONING (default off)"} for role in ("screener", "verifier")]
+
+
+@app.get("/api/dev/models", dependencies=[Depends(features.require_dev_mode)])
+def dev_models():
+    """Developer mode: each model's reasoning (thinking) setting and where it comes from."""
+    return _models()
+
+
+@app.post("/api/dev/models", dependencies=[Depends(features.require_dev_mode)])
+def dev_toggle_reasoning(body: ReasoningToggle):
+    if body.role not in config.MODELS:
+        raise HTTPException(422, f"Unknown role: {body.role}")
+    if body.reasoning is None:
+        llm_mod.REASONING_OVERRIDES.pop(body.role, None)
+    else:
+        llm_mod.REASONING_OVERRIDES[body.role] = body.reasoning
+    _log("", f"Developer mode: {body.role} reasoning " + ("reset to deploy setting" if body.reasoning is None else
+                                                         "on" if body.reasoning else "off"), who="Developer")
+    return _models()
 
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "screener": config.SCREENER_MODEL, "verifier": config.VERIFIER_MODEL}
+    return {"ok": True, "screener": config.SCREENER_MODEL, "verifier": config.VERIFIER_MODEL,
+            "reasoning": {m["role"]: m["reasoning"] for m in _models()}}
 
 
 # ---------- Pages ----------

@@ -49,6 +49,7 @@ Flags are read on every request, so a restart picks up a change; no rebuild is n
 | `ADVOLARE_MAX_CANDIDATES` | `5` | Screen at most this many prefilter candidates per run, most recently admitted first. Each costs about 2 model calls per notes criterion. `0` = all |
 | `ADVOLARE_WORKERS` | `4` | Patients screened at once (threads; each opens its own read-only warehouse connection) |
 | `STAGE1_STOP_ON_EXCLUSION` | `0` (`1` in compose) | `config.py`: stage 1 stops at the first exclusion that is met with real evidence |
+| `LLM_REASONING` / `SCREENER_REASONING` / `VERIFIER_REASONING` | `off` | `on` lets that model think (no `reasoning_effort` sent, up to `REASONING_MAX_OUTPUT_TOKENS`=4096 output tokens). Off always sends `reasoning_effort: "none"`. The developer-mode footer has a toggle per model |
 | `ADVOLARE_MOCK_STEP_DELAY` | `0.8` | Seconds between mock progress steps |
 | `APP_DB_PATH` | `data/app.db` | App database (`src/store.py`). Created and seeded with the demo studies on start-up |
 | `DB_PATH` | `data/warehouse.db` | Warehouse (`config.py`). Build it with `python data/generate.py && python data/load_notes.py` (notes from `data/notes_cache.json`); the Docker image does this |

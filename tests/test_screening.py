@@ -223,15 +223,34 @@ def test_parse_verdict_handles_fences_and_think():
     assert v.verdict == VerdictValue.met
 
 
-def test_rejected_reasoning_effort_is_dropped():
+def test_reasoning_effort_is_never_dropped():
+    """Without reasoning_effort both models think by default (Qwen can return nothing), so a server that
+    rejects it is an error for that call, not a reason to stop sending it."""
     req = httpx.Request("POST", "http://x")
     err = openai.BadRequestError("unknown field reasoning_effort", response=httpx.Response(400, request=req), body=None)
-    fake = ScriptedClient([err, response(content=GOOD), response(content=GOOD)])
+    fake = ScriptedClient([err, response(content=GOOD)])
+    llm = LLM(fake)
+    with pytest.raises(openai.BadRequestError):
+        llm.verdict("screener", [{"role": "user", "content": "x"}])
+    llm.verdict("screener", [{"role": "user", "content": "x"}])
+    assert all(r["reasoning_effort"] == "none" for r in fake.requests)
+
+
+def test_reasoning_can_be_switched_on_per_role(monkeypatch):
+    monkeypatch.setitem(config.REASONING, "verifier", True)
+    fake = ScriptedClient([response(content=GOOD), response(content=GOOD)])
     llm = LLM(fake)
     llm.verdict("screener", [{"role": "user", "content": "x"}])
-    llm.verdict("screener", [{"role": "user", "content": "x"}])
-    assert "reasoning_effort" in fake.requests[0]
-    assert "reasoning_effort" not in fake.requests[1] and "reasoning_effort" not in fake.requests[2]
+    llm.verdict("verifier", [{"role": "user", "content": "x"}])
+    screener, verifier = fake.requests
+    assert screener["reasoning_effort"] == "none" and screener["max_tokens"] == config.MAX_OUTPUT_TOKENS
+    assert "reasoning_effort" not in verifier and verifier["max_tokens"] == config.REASONING_MAX_OUTPUT_TOKENS
+
+
+def test_reasoning_override_wins_over_config(monkeypatch):
+    monkeypatch.setitem(config.REASONING, "screener", True)
+    monkeypatch.setattr(llm_mod, "REASONING_OVERRIDES", {"screener": False})
+    assert llm_mod.reasoning_on("screener") is False
 
 
 def test_fit_to_budget_truncates_tool_results_only():
