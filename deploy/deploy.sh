@@ -17,12 +17,24 @@ VERIFIER=qwen3.6:35b-a3b
 
 mkdir -p "$ROOT/ui" "$ROOT/deploy"
 rsync -a --delete "$HERE/" "$ROOT/deploy/"
-if [[ -f "$SRC/app/app.py" ]]; then
+if [[ -f "$SRC/app/app.py" || -f "$SRC/api/main.py" || -f "$SRC/Dockerfile" ]]; then
   rsync -a --delete --exclude .git --exclude __pycache__ --exclude 'data/*.db' "$SRC/" "$ROOT/ui/"
   (cd "$SRC" && git log -1 --format='%h %s' 2>/dev/null || true) > "$ROOT/ui/DEPLOYED_VERSION"
 else
-  echo "No app/app.py in $SRC; keeping the UI code already in $ROOT/ui"
+  echo "No app in $SRC; keeping the code already in $ROOT/ui"
 fi
+
+# Pick what to run from the deployed code.
+profiles=()
+[[ -f "$ROOT/ui/app/app.py" ]] && profiles+=(streamlit)
+for f in Dockerfile api/Dockerfile web/Dockerfile; do
+  if [[ -f "$ROOT/ui/$f" ]]; then export WEB_DOCKERFILE="$f"; profiles+=(web); break; fi
+done
+export COMPOSE_PROFILES="$(IFS=,; echo "${profiles[*]:-}")"
+echo "Compose profiles: ${COMPOSE_PROFILES:-none (LLM server only)}"
+# Stop app containers whose code is no longer there.
+[[ " ${profiles[*]:-} " == *" streamlit "* ]] || docker rm -f trialmatch-ui >/dev/null 2>&1 || true
+[[ " ${profiles[*]:-} " == *" web "* ]] || docker rm -f trialmatch-web >/dev/null 2>&1 || true
 
 # One-time move from the hand-started containers to compose-managed ones.
 for c in trialmatch-ollama trialmatch-ui; do
@@ -46,6 +58,11 @@ done
 
 docker exec trialmatch-ollama ollama ps
 docker compose ps
-for i in $(seq 1 30); do curl -fsS -o /dev/null "http://$LANIP:8501/" && break; sleep 2; done
-curl -s -o /dev/null -w "UI HTTP %{http_code}\n" "http://$LANIP:8501/"
-echo "LLM API: http://spark1.local:11434/v1    Web UI: http://spark1.local:8501"
+echo "LLM API: http://spark1.local:11434/v1"
+check() {  # name port
+  for i in $(seq 1 45); do curl -fs -o /dev/null "http://$LANIP:$2/" && break; sleep 2; done
+  echo "$1: http://spark1.local:$2  (HTTP $(curl -s -o /dev/null -w '%{http_code}' "http://$LANIP:$2/"))"
+}
+[[ " ${profiles[*]:-} " == *" streamlit "* ]] && check "Streamlit UI" 8501
+[[ " ${profiles[*]:-} " == *" web "* ]] && check "Web app (FastAPI)" 8000
+true
