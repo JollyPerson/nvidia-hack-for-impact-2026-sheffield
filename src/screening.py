@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import sqlite3
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
 import openai
@@ -211,8 +212,15 @@ def screen_patient(
     study: Study,
     patient_id: str,
     audit: list | None = None,
+    workers: int = 1,
 ) -> PatientResult:
-    """Stage 1 then (if shortlisted) stage 2 for every notes criterion of the study."""
+    """Stage 1 then (if shortlisted) stage 2 for every notes criterion of the study.
+
+    workers > 1 checks that many criteria at once in each stage (the model server takes several requests
+    at a time). The connection is then used from several threads, so it must be safe for that (pipeline.py
+    passes one that serialises each query); it is only read. Stage 1 then checks every criterion, so
+    STAGE1_STOP_ON_EXCLUSION has no effect.
+    """
     tools = PatientTools(conn, patient_id)
     criteria = [(i, c) for i, c in enumerate(study.criteria) if c.kind == CriterionKind.notes]
     # Exclusions first, so a clear exclusion can stop stage 1 early (if configured).
@@ -220,27 +228,49 @@ def screen_patient(
 
     assessments = {_criterion_id(c, i): CriterionAssessment(criterion_id=_criterion_id(c, i)) for i, c in criteria}
     result = PatientResult(study_id=study.id or "", patient_id=patient_id)
+    parallel = workers > 1 and len(criteria) > 1
 
     # Stage 1: screener
-    for i, c in criteria:
-        a = assessments[_criterion_id(c, i)]
-        a.stage1 = screen_criterion(llm, tools, c, "screener", audit=audit)
-        if _excluded_by(a.stage1, c, tools):
-            result.reasons.append(f"Stage 1: exclusion met: {c.description}")
-            if config.STAGE1_STOP_ON_EXCLUSION:
-                break
+    if parallel:
+        verdicts = _in_parallel(workers, [lambda c=c: screen_criterion(llm, tools, c, "screener", audit=audit)
+                                          for _, c in criteria])
+        for (i, c), v in zip(criteria, verdicts):
+            assessments[_criterion_id(c, i)].stage1 = v
+            if _excluded_by(v, c, tools):
+                result.reasons.append(f"Stage 1: exclusion met: {c.description}")
+    else:
+        for i, c in criteria:
+            a = assessments[_criterion_id(c, i)]
+            a.stage1 = screen_criterion(llm, tools, c, "screener", audit=audit)
+            if _excluded_by(a.stage1, c, tools):
+                result.reasons.append(f"Stage 1: exclusion met: {c.description}")
+                if config.STAGE1_STOP_ON_EXCLUSION:
+                    break
     result.shortlisted = not result.reasons
 
     # Stage 2: verifier, only for shortlisted patients
     if result.shortlisted:
-        for i, c in criteria:
+        def verify(i, c):
             a = assessments[_criterion_id(c, i)]
             pointers = a.stage1.citations if a.stage1 else []
-            a.stage2 = screen_criterion(llm, tools, c, "verifier", pointers=pointers, audit=audit)
+            return screen_criterion(llm, tools, c, "verifier", pointers=pointers, audit=audit)
+
+        if parallel:
+            verdicts = _in_parallel(workers, [lambda i=i, c=c: verify(i, c) for i, c in criteria])
+        else:
+            verdicts = [verify(i, c) for i, c in criteria]
+        for (i, c), v in zip(criteria, verdicts):
+            assessments[_criterion_id(c, i)].stage2 = v
 
     # Keep the study's own criterion order in the output.
     result.assessments = [assessments[_criterion_id(c, i)] for i, c in sorted(criteria)]
     return result
+
+
+def _in_parallel(workers: int, calls: list) -> list:
+    """Run the calls on up to `workers` threads; results in the same order as `calls`."""
+    with ThreadPoolExecutor(max_workers=min(workers, len(calls)), thread_name_prefix="criterion") as pool:
+        return list(pool.map(lambda f: f(), calls))
 
 
 def screen_study(

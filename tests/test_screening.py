@@ -306,3 +306,21 @@ def test_bad_tool_calls_return_errors_not_exceptions(conn):
     assert json.loads(t.run("get_labs", '{"test": "CRP"}'))["rows"][0]["PathologyID"] == "L-1001"
     assert json.loads(t.run("get_diagnoses", None))["rows"]
     assert json.loads(t.run("get_observations", "{}"))["rows"][0]["ObservationID"] == "O-1001"
+
+
+def test_criteria_in_parallel_give_the_same_verdicts():
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "w.db"
+        build_db(path).close()
+        conn = sqlite3.connect(path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        from src.pipeline import _SharedConn
+        for pid in EXPECTED:
+            one = screen_patient(LLM(RuleBasedClient()), conn, STUDY, pid)
+            many = screen_patient(LLM(RuleBasedClient()), _SharedConn(conn), STUDY, pid, workers=4)
+            assert many.model_dump() == one.model_dump(), pid
+        conn.close()

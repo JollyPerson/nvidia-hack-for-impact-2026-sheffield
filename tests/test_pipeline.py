@@ -77,3 +77,14 @@ def test_given_connection_stays_sequential():
     steps = []
     run_screening(STUDY, LLM(RuleBasedClient()), build_db(), on_step=steps.append, workers=4)
     assert any("Patient 5 of 5" in s["detail"] for s in steps)
+
+
+def test_patients_and_criteria_in_parallel(tmp_path, monkeypatch):
+    import config
+
+    warehouse = tmp_path / "warehouse.db"
+    build_db(warehouse).close()
+    monkeypatch.setattr(config, "DB_PATH", warehouse)
+    one = run_screening(STUDY, LLM(RuleBasedClient()))
+    many = run_screening(STUDY, LLM(RuleBasedClient()), workers=2, criteria_workers=4)
+    assert [p.model_dump() for p in many.patients] == [p.model_dump() for p in one.patients]

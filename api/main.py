@@ -57,8 +57,14 @@ def max_candidates() -> int | None:
 
 
 def workers() -> int:
-    """ADVOLARE_WORKERS: patients screened at once. The Spark's Ollama takes 8 requests at a time."""
-    return max(1, int(os.environ.get("ADVOLARE_WORKERS", "4") or 1))
+    """ADVOLARE_WORKERS: patients screened at once."""
+    return max(1, int(os.environ.get("ADVOLARE_WORKERS", "2") or 1))
+
+
+def criteria_workers() -> int:
+    """ADVOLARE_CRITERIA_WORKERS: criteria checked at once per patient. Keep workers x this within the
+    model server's OLLAMA_NUM_PARALLEL (8 on the Spark)."""
+    return max(1, int(os.environ.get("ADVOLARE_CRITERIA_WORKERS", "4") or 1))
 
 
 # Seconds between mock pipeline steps when streaming progress (0 in tests).
@@ -246,7 +252,8 @@ def _worker(study: Study, live: LiveRun, started: ScreeningRun) -> None:
             run = _mock_pipeline(study, live, emit)
         else:
             run = pipeline.run_screening(study, llm=make_llm(), on_step=emit, run_id=live.run_id,
-                                         max_candidates=max_candidates(), workers=workers())
+                                         max_candidates=max_candidates(), workers=workers(),
+                                         criteria_workers=criteria_workers())
         run.started_at = started.started_at
         store.save_run(run)
         _log(study.id, f"Screening finished in {time.perf_counter() - t0:.0f}s: {run.likely_eligible} likely "

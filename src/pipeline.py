@@ -61,6 +61,38 @@ class _TimedLLM:
         return self._timed(self.llm.verdict, role, *args, **kwargs)
 
 
+class _Rows:
+    """Rows already fetched, with the cursor methods the tools use."""
+
+    def __init__(self, rows: list):
+        self._rows = rows
+
+    def fetchone(self):
+        return self._rows[0] if self._rows else None
+
+    def fetchall(self):
+        return list(self._rows)
+
+    def __iter__(self):
+        return iter(self._rows)
+
+
+class _SharedConn:
+    """One read-only connection that several criterion threads can query: each query runs under a lock
+    and is fetched in full before the lock is released (queries take milliseconds, model calls seconds)."""
+
+    def __init__(self, conn: sqlite3.Connection):
+        self._conn = conn
+        self._lock = threading.Lock()
+
+    def execute(self, sql, params=()):
+        with self._lock:
+            return _Rows(self._conn.execute(sql, params).fetchall())
+
+    def __getattr__(self, name):
+        return getattr(self._conn, name)
+
+
 def _step(n: int, state: str, detail: str = "", seconds: float | None = None, model: str | None = None) -> dict:
     d = {"step": n, "name": STEPS[n - 1], "state": state, "detail": detail}
     if seconds is not None:
@@ -94,7 +126,8 @@ def _most_recent_first(conn: sqlite3.Connection, candidates: list) -> list:
     return sorted(candidates, key=lambda c: (arrived.get(c.encounter_id) or "", c.patient_id), reverse=True)
 
 
-def _screen_all(llm, conn, study, patient_ids, workers, audit, emit, n_notes) -> list[PatientResult]:
+def _screen_all(llm, conn, study, patient_ids, workers, audit, emit, n_notes,
+                criteria_workers: int = 1) -> list[PatientResult]:
     """screen_patient for every candidate, `workers` at a time. Results keep the candidates' order.
 
     The model server takes several requests at once (OLLAMA_NUM_PARALLEL), so patients run in parallel
@@ -105,7 +138,8 @@ def _screen_all(llm, conn, study, patient_ids, workers, audit, emit, n_notes) ->
         for n, pid in enumerate(patient_ids, 1):
             emit(_step(2, "running", f"Patient {n} of {len(patient_ids)}: checking {n_notes} notes criteria.",
                        model=config.SCREENER_MODEL))
-            out.append(screen_patient(llm, conn, study, pid, audit=audit))
+            shared = _SharedConn(conn) if criteria_workers > 1 else conn
+            out.append(screen_patient(llm, shared, study, pid, audit=audit, workers=criteria_workers))
         return out
 
     local = threading.local()
@@ -116,7 +150,8 @@ def _screen_all(llm, conn, study, patient_ids, workers, audit, emit, n_notes) ->
             local.conn = sqlite3.connect(f"file:{config.DB_PATH}?mode=ro", uri=True, check_same_thread=False)
             local.conn.row_factory = sqlite3.Row
             opened.append(local.conn)
-        return screen_patient(llm, local.conn, study, pid, audit=audit)
+        shared = _SharedConn(local.conn) if criteria_workers > 1 else local.conn
+        return screen_patient(llm, shared, study, pid, audit=audit, workers=criteria_workers)
 
     opened: list[sqlite3.Connection] = []
     results: dict[str, PatientResult] = {}
@@ -148,11 +183,13 @@ def run_screening(
     now: datetime | None = None,
     audit: list | None = None,
     workers: int = 1,
+    criteria_workers: int = 1,
 ) -> ScreeningRun:
     """Screen one study end to end. Opens its own read-only warehouse connection unless one is given.
 
     workers > 1 screens that many patients at once (each thread opens its own connection), so it applies
-    only when the pipeline opens the warehouse itself."""
+    only when the pipeline opens the warehouse itself. criteria_workers > 1 also checks that many of a
+    patient's criteria at once, so up to workers x criteria_workers requests reach each model together."""
     emit = on_step or (lambda _d: None)
     own_conn = conn is None
     conn = conn or connect_readonly(config.DB_PATH)
@@ -176,10 +213,12 @@ def run_screening(
         timed = _TimedLLM(llm or LLM())
         n_notes = sum(c.kind == "notes" for c in study.criteria)
         workers = max(1, min(workers, len(candidates))) if own_conn else 1  # a given connection stays on this thread
+        criteria_workers = criteria_workers if own_conn else 1
         emit(_step(2, "running", f"Reading notes for {len(candidates)} patients, {workers} at a time.",
                    model=config.SCREENER_MODEL))
         t = time.perf_counter()
-        results = _screen_all(timed, conn, study, [c.patient_id for c in candidates], workers, audit, emit, n_notes)
+        results = _screen_all(timed, conn, study, [c.patient_id for c in candidates], workers, audit, emit, n_notes,
+                              criteria_workers)
         wall = time.perf_counter() - t
         run.shortlisted_stage1 = sum(r.shortlisted for r in results)
         errors = sum(v is not None and v.reasoning.startswith(("model server error", "screening error"))
@@ -187,7 +226,7 @@ def run_screening(
         # With patients in parallel the stages overlap, so split the wall time by each model's share of the work.
         total = (timed.seconds["screener"] + timed.seconds["verifier"]) or 1.0
         emit(_step(2, "done", f"Checked {n_notes} notes criteria for {len(results)} candidates, one call per "
-                              f"criterion, {workers} patients at a time. Shortlisted {run.shortlisted_stage1}. "
+                              f"criterion, {workers} patients x {criteria_workers} criteria at a time. Shortlisted {run.shortlisted_stage1}. "
                               f"Reasoning {'on' if reasoning_on('screener') else 'off'}."
                               + (f" {errors} model calls failed and count as insufficient." if errors else ""),
                    wall * timed.seconds["screener"] / total, config.SCREENER_MODEL))
