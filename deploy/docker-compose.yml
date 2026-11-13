@@ -79,6 +79,9 @@ services:
       LLM_BASE_URL: http://ollama:11434/v1
       SCREENER_MODEL: nemotron-3.5-lightning:30b
       VERIFIER_MODEL: qwen3.6:35b-a3b
+      # Screening (see api/README.md): ADVOLARE_MOCK=true for canned results; cap on candidates per run (0 = all).
+      ADVOLARE_MOCK: ${ADVOLARE_MOCK:-}
+      ADVOLARE_MAX_CANDIDATES: ${ADVOLARE_MAX_CANDIDATES:-}
       # Extras (see api/README.md). Empty = default. Set in deploy/features.env (committed) or ~/trialmatch/features.env (Spark only).
       ADVOLARE_DEV_MODE: ${ADVOLARE_DEV_MODE:-}
       FEATURES_ALL: ${FEATURES_ALL:-}

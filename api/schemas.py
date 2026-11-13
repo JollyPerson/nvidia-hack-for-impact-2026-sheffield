@@ -1,7 +1,9 @@
 """Shapes the browser needs on top of src/models.py. API-only: nothing in the pipeline imports these.
 
-The shared contracts (Study, Criterion, Citation, Verdict, PatientResult) come from src/models.py unchanged.
+The shared contracts (Study, Criterion, Citation, Verdict, PatientResult, ScreeningRun, Decision, AuditEntry)
+come from src/models.py unchanged. The views here wrap them with what the pages show alongside.
 """
+from datetime import datetime
 from enum import Enum
 from typing import Literal
 
@@ -20,8 +22,8 @@ class StudySummary(BaseModel):
     screened: bool
 
 
-class Decision(str, Enum):
-    """The clinician's decision. PatientResult.approved mirrors `approved`; `rejected` is kept here for the log."""
+class DecisionValue(str, Enum):
+    """Values of src.models.Decision.decision. PatientResult.approved mirrors `approved`."""
     pending = "pending"
     approved = "approved"
     rejected = "rejected"
@@ -30,13 +32,14 @@ class Decision(str, Enum):
 class PatientView(BaseModel):
     """One row on the results page: the pipeline's PatientResult plus what the clinician needs to see alongside it.
 
-    Age and sex come from the Patients table. Never contains contact details.
+    Age and sex come from the Patients table; the summary is built from the decide step's reasons.
+    Never contains contact details.
     """
     patient_id: str
-    age: int
-    sex: str
-    summary: str
-    decision: Decision = Decision.pending
+    age: int | None = None
+    sex: str = ""
+    summary: str = ""
+    decision: DecisionValue = DecisionValue.pending
     result: PatientResult
 
 
@@ -63,21 +66,26 @@ class TraceStep(BaseModel):
     model: str | None = None
 
 
-class ScreeningRun(BaseModel):
+class RunView(BaseModel):
+    """src.models.ScreeningRun as the results page shows it: funnel counts grouped, progress steps, patient views."""
     run_id: str
     study_id: str
-    status: Literal["running", "complete"]
+    status: Literal["running", "complete", "failed"]
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    error: str = ""
     trace: list[TraceStep] = []
     funnel: Funnel | None = None
     patients: list[PatientView] = []
 
 
 class Contact(BaseModel):
-    """From PatientContacts. Never passed to a model; returned only after the clinician approves the patient."""
+    """Mirrors the PatientContacts table (data/schema.sql). Never passed to a model; returned only after the
+    clinician approves the patient. Every column can be empty."""
     patient_id: str
-    name: str
-    mobile: str
-    email: str
+    mobile_number: str | None = None
+    landline: str | None = None
+    email: str | None = None
     guardian_name: str | None = None
     guardian_phone: str | None = None
 
@@ -92,19 +100,10 @@ class DraftResponse(BaseModel):
 
 
 class DecisionRequest(BaseModel):
-    decision: Decision
+    decision: DecisionValue
     note: str = ""
 
 
 class DecisionResponse(BaseModel):
     patient: PatientView
     contact: Contact | None = None
-
-
-class AuditEntry(BaseModel):
-    when: str
-    study_id: str
-    who: str
-    action: str
-    patient_id: str = ""
-    note: str = ""

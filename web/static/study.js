@@ -79,7 +79,7 @@
     const es = new EventSource(`/api/runs/${run.run_id}/events`);
     es.addEventListener("step", ev => {
       const d = JSON.parse(ev.data);
-      states[d.step - 1] = d.state === "running" ? { state: "running", name: d.name } : { ...d, state: "done" };
+      states[d.step - 1] = d.state === "running" ? { state: "running", name: d.name, detail: d.detail, model: d.model } : { ...d, state: "done" };
       $("tasks").outerHTML = taskList(states);
     });
     es.addEventListener("complete", async () => {
@@ -87,6 +87,12 @@
       btn.disabled = false; btn.textContent = "Run screening again";
       await loadResults(); loadAudit();
       $("results").scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    es.addEventListener("failed", ev => {
+      es.close(); btn.disabled = false; btn.textContent = "Run screening again";
+      const d = JSON.parse(ev.data);
+      $("progress").insertAdjacentHTML("beforeend", A.errorSummary([{ text: `Screening stopped: ${d.error}` }]));
+      loadAudit();
     });
     es.onerror = () => {
       if (es.readyState === EventSource.CLOSED) return;
@@ -99,6 +105,7 @@
   async function loadResults() {
     try { S.run = await A.api(`/api/studies/${encodeURIComponent(studyId)}/results`); }
     catch (e) { S.run = null; return false; }
+    if (!S.run.funnel) { S.run = null; return false; }  // still running, or the last run failed
     S.run.trace.forEach(t => { if (t.step === 2) S.models.screener = t.model; if (t.step === 3) S.models.verifier = t.model; });
     renderResults();
     return true;
@@ -115,7 +122,7 @@
       return `<h3 class="nhsuk-heading-m">${heading} (${rows.length})</h3>${intro ? `<p>${intro}</p>` : ""}
         ${A.table("", ["Patient", "Age", "Sex", "Why", "Your decision"], rows.map(r => [
           `<button type="button" class="adv-patient-link" data-mrn="${A.esc(r.patient_id)}">${A.esc(r.patient_id)}</button>`,
-          r.age, r.sex, A.esc(r.summary) + (nFlags(r) ? `<br>${A.tag(`${nFlags(r)} flag${nFlags(r) > 1 ? "s" : ""}`, "yellow")}` : ""),
+          r.age ?? "", A.esc(r.sex), A.esc(r.summary) + (nFlags(r) ? `<br>${A.tag(`${nFlags(r)} flag${nFlags(r) > 1 ? "s" : ""}`, "yellow")}` : ""),
           decisionTag(r.decision)]))}`;
     };
     const notShortlisted = f.candidates_after_sql - f.shortlisted_stage1;
@@ -229,13 +236,15 @@
       return `<div class="nhsuk-card adv-criterion${flagged ? " flagged" : exclMet ? " exclusion-met" : ""}"><div class="nhsuk-card__content">
         <h3 class="nhsuk-card__heading nhsuk-heading-s">${A.esc(c.id)}: ${A.esc(c.description)}</h3>
         <p>${A.typeTag(c.type)} ${A.kindTag(c.kind)} ${flagged ? A.tag("Flagged", "yellow") : ""}</p>
-        ${c.kind === "structured" ? verdictBlock("Record check (SQL)", "", a.stage1, failedStage(1))
+        ${c.kind === "structured" && !a.stage1 && c.type === "exclusion"
+          ? `<div><h4 class="nhsuk-heading-xs">Record check (SQL)</h4><p>${A.verdict("not_met")}</p><p class="nhsuk-body-s">No matching record: this patient passed the check in SQL before any model read their notes.</p></div>`
+          : c.kind === "structured" ? verdictBlock("Record check (SQL)", "", a.stage1, failedStage(1))
           : `<div class="adv-verdicts">${verdictBlock("Stage 1: screener", S.models.screener, a.stage1, failedStage(1))}${verdictBlock("Stage 2: verifier", S.models.verifier, a.stage2, failedStage(2))}</div>`}
       </div></div>`;
     }).join("");
     const allFlags = r.assessments.flatMap(a => a.flags.map(f => flagText(a.criterion_id, f)));
     const flags = allFlags.length ? A.warning("Check these before you decide", `<ul>${allFlags.map(t => `<li>${A.esc(t)}</li>`).join("")}</ul>`) : "";
-    const reasons = r.reasons.length ? A.inset(`<p>Excluded because:</p><ul>${r.reasons.map(x => `<li>${A.esc(x)}</li>`).join("")}</ul>`) : "";
+    const reasons = r.reasons.length ? A.inset(`<p>${r.status === "excluded" ? "Excluded because:" : r.status === "needs_review" ? "Needs review because:" : "Why:"}</p><ul>${r.reasons.map(x => `<li>${A.esc(x)}</li>`).join("")}</ul>`) : "";
     const decided = p.decision !== "pending";
     const decisionForm = decided ? `
       <h2 class="nhsuk-heading-m">Your decision</h2>
@@ -251,8 +260,9 @@
       </div>`;
     const contactHtml = contact ? `
       <h2 class="nhsuk-heading-m">Contact details</h2>
-      ${A.summaryList([["Name", A.esc(contact.name)], ["Mobile", A.esc(contact.mobile)], ["Email", A.esc(contact.email)],
-        ...(contact.guardian_name ? [["Next of kin", `${A.esc(contact.guardian_name)}, ${A.esc(contact.guardian_phone || "")}`]] : [])])}
+      ${A.summaryList([["Mobile", A.esc(contact.mobile_number || "Not recorded")], ["Landline", A.esc(contact.landline || "Not recorded")],
+        ["Email", A.esc(contact.email || "Not recorded")],
+        ...(contact.guardian_name ? [["Parent or guardian", `${A.esc(contact.guardian_name)}, ${A.esc(contact.guardian_phone || "")}`]] : [])])}
       ${A.inset(`<p>These details come from the PatientContacts table. They are shown only after your approval and were never given to an AI model.</p>`)}
       ${A.F.invitation_letter ? `<h2 class="nhsuk-heading-m">Invitation letter</h2>
       <div class="nhsuk-form-group"><label class="nhsuk-label" for="letter">Draft letter to check and edit</label>
@@ -265,7 +275,7 @@
       <h2 class="nhsuk-heading-xl">${A.esc(p.patient_id)}</h2>
       <p>${A.patientStatus(r.status)}</p>
       <div class="nhsuk-grid-row"><div class="nhsuk-grid-column-two-thirds">
-        ${A.summaryList([["Age", `${p.age}`], ["Sex", p.sex], ["Summary", A.esc(p.summary)], ["Decision", decisionTag(p.decision)]])}
+        ${A.summaryList([["Age", p.age == null ? "Not recorded" : `${p.age}`], ["Sex", p.sex], ["Summary", A.esc(p.summary)], ["Decision", decisionTag(p.decision)]])}
         ${flags}${reasons}
       </div></div>
       <h2 class="nhsuk-heading-m">Evidence for each criterion</h2>

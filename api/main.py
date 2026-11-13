@@ -1,14 +1,22 @@
 """All HTTP endpoints. Serves the JSON API under /api and the plain HTML pages from web/.
 
-Until the real pipeline is wired in, screening results come from api/mock_data.py with the same
-shapes as src/models.py
-(wrapped in the API-only views in api/schemas.py). Swap `_run_pipeline` for src.pipeline without changing the pages.
+Screening runs the real pipeline (src/pipeline.py) in a background thread and streams its progress to the
+browser over server-sent events. Studies, runs, decisions and the audit log live in the app database
+(src/store.py, data/app.db); the demo studies are seeded on start-up (data/seed_studies.py).
+
+Set ADVOLARE_MOCK=true to use the canned results in api/mock_data.py instead (no warehouse or model
+server needed). See api/README.md.
 """
 import asyncio
 import json
+import logging
 import os
+import sqlite3
+import threading
+import time
 import uuid
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import date, datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
@@ -18,71 +26,232 @@ from pydantic import BaseModel
 
 import config
 from api import extras, features, mock_data
-from api.schemas import (AuditEntry, Contact, Decision, DecisionRequest, DecisionResponse, DraftRequest, DraftResponse,
-                         PatientView, ScreeningRun, StudySummary)
-from src.models import Study
+from api.schemas import (Contact, DecisionRequest, DecisionResponse, DecisionValue, DraftRequest, DraftResponse,
+                         Funnel, PatientView, RunView, StudySummary, TraceStep)
+from data import seed_studies
+from src import pipeline, store
+from src.models import AuditEntry, CriterionKind, Decision, PatientResult, ScreeningRun, Study
+from src.prefilter import PrefilterError, parse_value
+
+log = logging.getLogger("advolare.api")
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
-# Seconds between mock pipeline steps when streaming progress (0 in tests). Goes when src.pipeline is wired in.
+
+
+def _env_true(name: str, default: str = "false") -> bool:
+    return os.environ.get(name, default).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def mock_mode() -> bool:
+    """ADVOLARE_MOCK=true: canned results from api/mock_data.py instead of the pipeline."""
+    return _env_true("ADVOLARE_MOCK")
+
+
+def max_candidates() -> int | None:
+    """ADVOLARE_MAX_CANDIDATES: screen at most this many prefilter candidates (each costs several model calls).
+    0 or empty means no limit."""
+    n = int(os.environ.get("ADVOLARE_MAX_CANDIDATES", "5") or 0)
+    return n or None
+
+
+# Seconds between mock pipeline steps when streaming progress (0 in tests).
 MOCK_STEP_DELAY = float(os.environ.get("ADVOLARE_MOCK_STEP_DELAY", "0.8"))
+
+
+def make_llm():
+    """The model gateway for a real run. None lets the pipeline build src.llm.LLM(); tests swap in a fake."""
+    return None
+
 
 app = FastAPI(title="Advolare", description="Clinical Trial Screening System (synthetic data only)")
 app.mount("/static", StaticFiles(directory=WEB / "static"), name="static")
 app.mount("/assets", StaticFiles(directory=WEB / "static" / "nhsuk" / "assets"), name="nhsuk-assets")
 
 
-# ---------- In-memory store (fine for the demo; one process) ----------
-class Store:
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.studies: dict[str, Study] = {s.id: s.model_copy(deep=True) for s in mock_data.STUDIES}
-        self.runs: dict[str, ScreeningRun] = {}
-        self.latest_run: dict[str, str] = {}
-        self.audit: list[dict] = []
-
-    def log(self, study_id: str, action: str, who: str = "Clinician", patient_id: str = "", note: str = ""):
-        self.audit.insert(0, {"when": datetime.now().isoformat(timespec="seconds"), "study_id": study_id,
-                              "who": who, "action": action, "patient_id": patient_id, "note": note})
+# ---------- App database and live runs ----------
+@dataclass
+class LiveRun:
+    """A run this process started: its progress events (for SSE) and the finished run once it is done."""
+    run_id: str
+    study_id: str
+    events: list[dict] = field(default_factory=list)
+    trace: dict[int, TraceStep] = field(default_factory=dict)
+    done: bool = False
+    error: str = ""
+    removed: list[dict] = field(default_factory=list)  # mock do-not-contact groups
+    funnel_extra: dict = field(default_factory=dict)  # mock-only funnel numbers
 
 
-store = Store()
+LIVE: dict[str, LiveRun] = {}
+MOCK_VIEWS: dict[str, PatientView] = {}  # age, sex and summary for mock patients (not in the warehouse)
+
+
+def init_app(reset: bool = False) -> None:
+    """Create the app database if needed and add the demo studies. reset=True starts from empty (tests)."""
+    seed_studies.seed(Path(store.APP_DB_PATH), reset=reset)
+    if reset:
+        LIVE.clear()
+
+
+init_app()
+
+
+def _log(study_id: str, action: str, who: str = "Clinician", patient_id: str = "", note: str = ""):
+    store.append_audit(AuditEntry(when=datetime.now(), study_id=study_id, who=who, action=action,
+                                  patient_id=patient_id, note=note))
 
 
 def _study(study_id: str) -> Study:
-    if study_id not in store.studies:
+    study = store.get_study(study_id)
+    if study is None:
         raise HTTPException(404, "Study not found")
-    return store.studies[study_id]
+    return study
 
 
-def _latest(study_id: str) -> ScreeningRun:
-    run_id = store.latest_run.get(study_id)
-    if not run_id:
+# ---------- Warehouse lookups (code only; nothing here goes to a model) ----------
+def _warehouse() -> sqlite3.Connection | None:
+    path = Path(config.DB_PATH)
+    if not path.exists():
+        return None
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+    conn.row_factory = sqlite3.Row
+    return conn
+
+
+def _age(dob: str) -> int | None:
+    try:
+        born = date.fromisoformat(dob[:10])
+    except (TypeError, ValueError):
+        return None
+    today = config.REFERENCE_NOW.date()
+    return today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+
+
+def _demographics(patient_ids: list[str]) -> dict[str, tuple[int | None, str]]:
+    out = {pid: (MOCK_VIEWS[pid].age, MOCK_VIEWS[pid].sex) for pid in patient_ids if pid in MOCK_VIEWS}
+    wanted = [pid for pid in patient_ids if pid not in out]
+    conn = _warehouse() if wanted else None
+    if conn is not None:
+        with conn:
+            marks = ",".join("?" * len(wanted))
+            for r in conn.execute(f"SELECT LocalPatientIdentifier, DateOfBirth, Sex FROM Patients "
+                                  f"WHERE LocalPatientIdentifier IN ({marks})", wanted):
+                out[r["LocalPatientIdentifier"]] = (_age(r["DateOfBirth"]), r["Sex"])
+        conn.close()
+    return out
+
+
+def _contact_from_warehouse(patient_id: str) -> Contact | None:
+    """PatientContacts is read only here, after approval. It never goes to a model or a tool."""
+    conn = _warehouse()
+    if conn is None:
+        return None
+    try:
+        r = conn.execute("SELECT * FROM PatientContacts WHERE LocalPatientIdentifier = ?", (patient_id,)).fetchone()
+    finally:
+        conn.close()
+    if r is None:
+        return None
+    return Contact(patient_id=patient_id, mobile_number=r["MobileNumber"], landline=r["Landline"], email=r["Email"],
+                   guardian_name=r["GuardianName"], guardian_phone=r["GuardianPhone"])
+
+
+# ---------- Building what the pages show ----------
+def _summary(r: PatientResult) -> str:
+    """One line for the results table, from the decide step's reasons (screening's own 'Stage 1:' notes left out)."""
+    if r.patient_id in MOCK_VIEWS and MOCK_VIEWS[r.patient_id].summary:
+        return MOCK_VIEWS[r.patient_id].summary
+    reasons = [x for x in r.reasons if not x.startswith("Stage 1:")] or r.reasons
+    return "; ".join(reasons[:3]) + (f"; and {len(reasons) - 3} more" if len(reasons) > 3 else "")
+
+
+def _view(run: ScreeningRun) -> RunView:
+    live = LIVE.get(run.run_id)
+    decisions = store.get_decisions(run.run_id)
+    people = _demographics([r.patient_id for r in run.patients])
+    patients = []
+    for r in run.patients:
+        age, sex = people.get(r.patient_id, (None, ""))
+        d = decisions.get(r.patient_id)
+        patients.append(PatientView(patient_id=r.patient_id, age=age, sex=sex, summary=_summary(r),
+                                    decision=DecisionValue(d.decision) if d else DecisionValue.pending, result=r))
+    funnel = None
+    if run.status == "complete":
+        extra = live.funnel_extra if live else {}
+        funnel = Funnel(removed_before_screening=live.removed if live else [],
+                        candidates_after_sql=run.candidates_after_sql + extra.get("candidates_after_sql", 0),
+                        shortlisted_stage1=run.shortlisted_stage1, confirmed_stage2=run.confirmed_stage2,
+                        likely_eligible=run.likely_eligible, needs_review=run.needs_review,
+                        excluded=run.excluded + extra.get("excluded", 0))
+    trace = [live.trace[k] for k in sorted(live.trace)] if live else []
+    return RunView(run_id=run.run_id, study_id=run.study_id, status=run.status, started_at=run.started_at,
+                   finished_at=run.finished_at, error=live.error if live else "", trace=trace, funnel=funnel,
+                   patients=patients)
+
+
+def _latest(study_id: str) -> RunView:
+    run = store.get_latest_run(study_id)
+    if run is None:
         raise HTTPException(404, "This study has not been screened yet")
-    return store.runs[run_id]
+    return _view(run)
 
 
 def _patient(study_id: str, patient_id: str) -> PatientView:
-    for r in _latest(study_id).patients:
-        if r.patient_id == patient_id:
-            return r
+    for p in _latest(study_id).patients:
+        if p.patient_id == patient_id:
+            return p
     raise HTTPException(404, "Patient not in this screening run")
 
 
-def _run_pipeline(study: Study) -> ScreeningRun:
-    """Mock of src.pipeline: prefilter -> stage 1 -> stage 2 -> validation -> decide."""
-    patients = mock_data.patients_for(study)
-    funnel = mock_data.funnel_for(patients)
-    trace = mock_data.trace_for(study, funnel)
-    for t in trace:
-        if t.model == "SCREENER":
-            t.model = config.SCREENER_MODEL
-        elif t.model == "VERIFIER":
-            t.model = config.VERIFIER_MODEL
-    return ScreeningRun(run_id=uuid.uuid4().hex[:8], study_id=study.id, status="running", trace=trace,
-                        funnel=funnel, patients=patients)
+# ---------- Running a screening ----------
+def _mock_pipeline(study: Study, live: LiveRun, emit) -> ScreeningRun:
+    """Canned results with the pipeline's shapes (ADVOLARE_MOCK=true)."""
+    views = mock_data.patients_for(study)
+    for v in views:
+        MOCK_VIEWS[v.patient_id] = v
+    funnel = mock_data.funnel_for(views)
+    live.removed = [g.model_dump() for g in funnel.removed_before_screening]
+    n_hidden = funnel.candidates_after_sql - len(views)  # candidates the mock drops at stage 1 without detail
+    live.funnel_extra = {"candidates_after_sql": n_hidden, "excluded": n_hidden}
+    for t in mock_data.trace_for(study, funnel):
+        model = {"SCREENER": config.SCREENER_MODEL, "VERIFIER": config.VERIFIER_MODEL}.get(t.model or "", t.model)
+        emit({"step": t.step, "name": t.name, "state": "running", "detail": ""})
+        time.sleep(MOCK_STEP_DELAY)
+        emit({**t.model_dump(), "model": model, "state": "done"})
+    statuses = [v.result.status.value for v in views]
+    return ScreeningRun(run_id=live.run_id, study_id=study.id, status="complete", started_at=datetime.now(),
+                        finished_at=datetime.now(), candidates_after_sql=len(views),
+                        shortlisted_stage1=funnel.shortlisted_stage1, confirmed_stage2=funnel.confirmed_stage2,
+                        likely_eligible=statuses.count("likely_eligible"), needs_review=statuses.count("needs_review"),
+                        excluded=statuses.count("excluded"), patients=[v.result for v in views])
+
+
+def _worker(study: Study, live: LiveRun, started: ScreeningRun) -> None:
+    def emit(d: dict):
+        live.events.append(d)
+        if d.get("state") == "done":
+            live.trace[d["step"]] = TraceStep(step=d["step"], name=d["name"], detail=d.get("detail", ""),
+                                              seconds=d.get("seconds", 0.0), model=d.get("model"))
+
+    t0 = time.perf_counter()
+    try:
+        if mock_mode():
+            run = _mock_pipeline(study, live, emit)
+        else:
+            run = pipeline.run_screening(study, llm=make_llm(), on_step=emit, run_id=live.run_id,
+                                         max_candidates=max_candidates())
+        run.started_at = started.started_at
+        store.save_run(run)
+        _log(study.id, f"Screening finished in {time.perf_counter() - t0:.0f}s: {run.likely_eligible} likely "
+                       f"eligible, {run.needs_review} need review, {run.excluded} excluded", who="Advolare pipeline")
+    except Exception as e:  # noqa: BLE001 - report any failure to the page rather than hanging it
+        log.exception("screening run %s failed", live.run_id)
+        live.error = f"{type(e).__name__}: {e}"
+        store.save_run(started.model_copy(update={"status": "failed", "finished_at": datetime.now()}))
+        _log(study.id, "Screening failed", who="Advolare pipeline", note=live.error)
+    finally:
+        live.done = True
 
 
 # ---------- Studies ----------
@@ -90,7 +259,7 @@ def _run_pipeline(study: Study) -> ScreeningRun:
 def list_studies():
     return [StudySummary(id=s.id, title=s.title, short_title=s.short_title, condition=s.condition,
                          status=s.status.value, target_sample_size=s.target_sample_size,
-                         screened=s.id in store.latest_run) for s in store.studies.values()]
+                         screened=store.get_latest_run(s.id) is not None) for s in store.list_studies()]
 
 
 @app.post("/api/studies", response_model=Study, status_code=201)
@@ -98,11 +267,15 @@ def create_study(body: Study):
     """Save a study. Code assigns the study and criterion IDs; any IDs sent by the browser are ignored."""
     if not body.criteria:
         raise HTTPException(422, "Add at least one eligibility criterion")
-    study_id = f"S-{len(store.studies) + 1:03d}"
-    criteria = [c.model_copy(update={"id": f"C{i}"}) for i, c in enumerate(body.criteria, 1)]
-    study = body.model_copy(update={"id": study_id, "criteria": criteria})
-    store.studies[study_id] = study
-    store.log(study_id, f"Created study with {len(criteria)} criteria")
+    for i, c in enumerate(body.criteria):
+        if c.kind == CriterionKind.structured:
+            try:
+                parse_value(c, f"C{i + 1}")  # the prefilter's own field and operator whitelist
+            except PrefilterError as e:
+                raise HTTPException(422, str(e))
+    study = store.create_study(body.model_copy(update={"id": None, "criteria": [
+        c.model_copy(update={"id": None}) for c in body.criteria]}))
+    _log(study.id, f"Created study with {len(study.criteria)} criteria")
     return study
 
 
@@ -124,38 +297,52 @@ def example_description():
 
 
 # ---------- Screening ----------
-@app.post("/api/studies/{study_id}/runs", response_model=ScreeningRun, status_code=202)
+@app.post("/api/studies/{study_id}/runs", response_model=RunView, status_code=202)
 def start_run(study_id: str):
     study = _study(study_id)
-    run = _run_pipeline(study)
-    store.runs[run.run_id] = run
-    store.latest_run[study_id] = run.run_id
-    store.log(study_id, "Started screening", who="Clinician")
-    return run.model_copy(update={"trace": [], "patients": [], "funnel": None})
+    if any(not r.done and r.study_id == study_id for r in LIVE.values()):
+        raise HTTPException(409, "This study is already being screened")
+    run_id = uuid.uuid4().hex[:8]
+    started = store.save_run(ScreeningRun(run_id=run_id, study_id=study_id, status="running",
+                                          started_at=datetime.now()))
+    live = LIVE[run_id] = LiveRun(run_id=run_id, study_id=study_id)
+    _log(study_id, "Started screening" + (" (mock results)" if mock_mode() else ""))
+    threading.Thread(target=_worker, args=(study, live, started), daemon=True, name=f"run-{run_id}").start()
+    return RunView(run_id=run_id, study_id=study_id, status="running", started_at=started.started_at)
 
 
 @app.get("/api/runs/{run_id}/events")
 async def run_events(run_id: str):
-    """Server-sent events: one `step` event per pipeline step, then `complete`."""
-    if run_id not in store.runs:
-        raise HTTPException(404, "Run not found")
-    run = store.runs[run_id]
+    """Server-sent events: `step` events as the pipeline moves (running, then done, per step), then `complete`
+    (or `failed` with the error)."""
+    live = LIVE.get(run_id)
+    if live is None:
+        run = store.get_run(run_id)
+        if run is None:
+            raise HTTPException(404, "Run not found")
 
     async def stream():
-        for step in run.trace:
-            yield f"event: step\ndata: {json.dumps({'step': step.step, 'state': 'running', 'name': step.name})}\n\n"
-            await asyncio.sleep(MOCK_STEP_DELAY)
-            yield f"event: step\ndata: {step.model_dump_json()}\n\n"
-        run.status = "complete"
-        store.log(run.study_id, f"Screening finished: {run.funnel.likely_eligible} likely eligible, "
-                                f"{run.funnel.needs_review} need review", who="Advolare pipeline")
-        yield f"event: complete\ndata: {json.dumps({'run_id': run.run_id})}\n\n"
+        if live is None:  # started by an earlier process: nothing to replay
+            yield f"event: complete\ndata: {json.dumps({'run_id': run_id})}\n\n"
+            return
+        sent = 0
+        while True:
+            while sent < len(live.events):
+                yield f"event: step\ndata: {json.dumps(live.events[sent])}\n\n"
+                sent += 1
+            if live.done and sent >= len(live.events):
+                break
+            await asyncio.sleep(0.2)
+        if live.error:
+            yield f"event: failed\ndata: {json.dumps({'run_id': run_id, 'error': live.error})}\n\n"
+        else:
+            yield f"event: complete\ndata: {json.dumps({'run_id': run_id})}\n\n"
 
     return StreamingResponse(stream(), media_type="text/event-stream",
                              headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
 
 
-@app.get("/api/studies/{study_id}/results", response_model=ScreeningRun)
+@app.get("/api/studies/{study_id}/results", response_model=RunView)
 def get_results(study_id: str):
     _study(study_id)
     return _latest(study_id)
@@ -168,20 +355,23 @@ def get_patient(study_id: str, patient_id: str):
 
 @app.post("/api/studies/{study_id}/patients/{patient_id}/decision", response_model=DecisionResponse)
 def decide(study_id: str, patient_id: str, body: DecisionRequest):
+    run = _latest(study_id)
+    _patient(study_id, patient_id)
+    store.record_decision(Decision(patient_id=patient_id, run_id=run.run_id, decision=body.decision.value,
+                                   note=body.note, who="Clinician", when=datetime.now()))
+    _log(study_id, {"approved": "Approved for contact", "rejected": "Rejected", "pending": "Decision cleared"}[body.decision.value],
+         patient_id=patient_id, note=body.note)
     patient = _patient(study_id, patient_id)
-    patient.decision = body.decision
-    patient.result.approved = body.decision == Decision.approved
-    store.log(study_id, {"approved": "Approved for contact", "rejected": "Rejected", "pending": "Decision cleared"}[body.decision.value],
-              patient_id=patient_id, note=body.note)
     return DecisionResponse(patient=patient, contact=_contact_if_approved(patient))
 
 
 def _contact_if_approved(patient: PatientView) -> Contact | None:
     """PatientContacts is joined only after the clinician approves. It never goes to a model."""
-    if patient.decision != Decision.approved:
+    if patient.decision != DecisionValue.approved:
         return None
-    return mock_data.CONTACTS.get(patient.patient_id) or Contact(
-        patient_id=patient.patient_id, name="(synthetic)", mobile="07700 900000", email="patient@example.com")
+    if patient.patient_id in mock_data.CONTACTS:
+        return mock_data.CONTACTS[patient.patient_id]
+    return _contact_from_warehouse(patient.patient_id) or Contact(patient_id=patient.patient_id)
 
 
 @app.get("/api/studies/{study_id}/patients/{patient_id}/contact", response_model=Contact)
@@ -195,7 +385,7 @@ def get_contact(study_id: str, patient_id: str):
 @app.get("/api/studies/{study_id}/audit", response_model=list[AuditEntry])
 def get_audit(study_id: str):
     _study(study_id)
-    return [a for a in store.audit if a["study_id"] == study_id]
+    return list(reversed(store.read_audit(study_id)))  # newest first
 
 
 # ---------- Extras ----------
@@ -273,7 +463,7 @@ def dev_toggle(body: FeatureToggle):
     if body.name not in features.FEATURES:
         raise HTTPException(422, f"Unknown feature: {body.name}")
     features.set_override(body.name, body.enabled)
-    store.log("", f"Developer mode: {body.name} " + ("reset to deploy setting" if body.enabled is None else
+    _log("", f"Developer mode: {body.name} " + ("reset to deploy setting" if body.enabled is None else
                                                      "on" if body.enabled else "off"), who="Developer")
     return features.describe()
 

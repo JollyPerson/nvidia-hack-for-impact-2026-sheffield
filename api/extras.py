@@ -112,8 +112,8 @@ ADMITTED_BASELINE = {"Age": {"16 to 49": 22, "50 to 69": 31, "70 and over": 47},
                      "Sex": {"Female": 49, "Male": 51},
                      "Ethnic group": {"White": 78, "Asian or Asian British": 10, "Black or Black British": 5,
                                       "Mixed or other": 4, "Not stated": 3}}
-MOCK_ETHNICITY = {"MRN-100231": "White", "MRN-100655": "White", "MRN-100834": "White", "MRN-100517": "Asian or Asian British",
-                  "MRN-100602": "White", "MRN-100790": "Black or Black British"}
+MOCK_ETHNICITY = {"MRN100231": "White", "MRN100655": "White", "MRN100834": "White", "MRN100517": "Asian or Asian British",
+                  "MRN100602": "White", "MRN100790": "Black or Black British"}
 
 
 def _band(age: int) -> str:
@@ -140,8 +140,8 @@ def fairness(patients: list[PatientView]) -> dict:
 
 # ---------- Invitation letter: a draft for the research team to check, edit and send themselves ----------
 def letter(study: Study, contact) -> str:
-    first = contact.name.split()[0] if contact.name else "Sir or Madam"
-    to = f"Dear {contact.guardian_name}" if contact.guardian_name else f"Dear {first}"
+    # PatientContacts holds no name: the research team adds it before sending.
+    to = f"Dear {contact.guardian_name}" if contact.guardian_name else "Dear [patient name]"
     return f"""{to},
 
 You may be able to take part in a research study at the hospital{f" called {study.short_title}" if study.short_title else ""}. A member of the research team will tell you what it involves if you would like to hear more.

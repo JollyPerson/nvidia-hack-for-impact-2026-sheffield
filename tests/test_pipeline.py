@@ -1,0 +1,44 @@
+"""Tests for src/pipeline.py: the five hand-built patients through every stage, with a fake model."""
+
+from data.seed_studies import PNEUMONIA
+from scripts.five_patients import STUDY, build_db
+from src.llm import LLM
+from src.models import FinalStatus
+from src.pipeline import STEPS, run_screening
+from tests.fake_llm import RuleBasedClient
+
+
+def test_five_patients_through_the_pipeline():
+    steps = []
+    run = run_screening(STUDY, LLM(RuleBasedClient()), build_db(), on_step=steps.append, run_id="r1")
+    status = {p.patient_id: p.status for p in run.patients}
+    assert status["P001"] == FinalStatus.likely_eligible  # clear match
+    assert status["P002"] == FinalStatus.excluded  # COPD on home O2, dropped at stage 1
+    assert status["P003"] == FinalStatus.needs_review  # ambiguous X-ray
+    assert status["P005"] == FinalStatus.needs_review  # nothing in the records
+    assert run.status == "complete" and run.finished_at
+    assert (run.candidates_after_sql, run.shortlisted_stage1) == (5, 4)
+    assert run.likely_eligible + run.needs_review + run.excluded == 5
+    # Every step reports running then done, in order, with timings for the done events.
+    done = [s for s in steps if s["state"] == "done"]
+    assert [s["name"] for s in done] == STEPS and all("seconds" in s for s in done)
+
+
+def test_max_candidates_limits_the_run():
+    run = run_screening(STUDY, LLM(RuleBasedClient()), build_db(), max_candidates=2)
+    assert run.candidates_after_sql == 2 and len(run.patients) == 2
+
+
+def test_structured_inclusions_are_code_verdicts_and_skip_validation(tmp_path):
+    """The prefilter's evidence is added as stage-1 `met` verdicts, without a stage 2 and without flags."""
+    conn = build_db()
+    conn.execute("UPDATE Patients SET DateOfBirth = '1950-01-01'")
+    study = STUDY.model_copy(update={"criteria": [PNEUMONIA.criteria[0], *STUDY.criteria[:1]]})
+    study.criteria[1] = study.criteria[1].model_copy(update={"id": "C2"})
+    run = run_screening(study, LLM(RuleBasedClient()), conn)
+    p001 = next(p for p in run.patients if p.patient_id == "P001")
+    c1 = next(a for a in p001.assessments if a.criterion_id == "C1")
+    assert c1.stage1.verdict == "met" and c1.stage1.citations[0].table == "Patients"
+    assert c1.stage2 is None and not c1.flags
+    assert [a.criterion_id for a in p001.assessments] == ["C1", "C2"]
+    assert p001.status == FinalStatus.likely_eligible
