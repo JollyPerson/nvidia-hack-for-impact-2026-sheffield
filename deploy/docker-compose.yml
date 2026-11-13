@@ -80,6 +80,7 @@ services:
       SCREENER_MODEL: nemotron-3.5-lightning:30b
       VERIFIER_MODEL: qwen3.6:35b-a3b
       # Extras (see api/README.md). Empty = default. Set in deploy/features.env (committed) or ~/trialmatch/features.env (Spark only).
+      ADVOLARE_DEV_MODE: ${ADVOLARE_DEV_MODE:-}
       FEATURES_ALL: ${FEATURES_ALL:-}
       FEATURE_DO_NOT_CONTACT: ${FEATURE_DO_NOT_CONTACT:-}
       FEATURE_DRAFT_CRITERIA: ${FEATURE_DRAFT_CRITERIA:-}

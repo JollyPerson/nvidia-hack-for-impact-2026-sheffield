@@ -14,6 +14,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
 
 import config
 from api import extras, features, mock_data
@@ -254,6 +255,33 @@ def screening_log_csv(study_id: str):
 def get_features():
     """Which extras are switched on. The pages read this to show or hide tabs and buttons."""
     return features.flags()
+
+
+class FeatureToggle(BaseModel):
+    name: str
+    enabled: bool | None  # None = back to the env setting
+
+
+@app.get("/api/dev/features", dependencies=[Depends(features.require_dev_mode)])
+def dev_features():
+    """Developer mode: every feature with its state and where the state comes from."""
+    return features.describe()
+
+
+@app.post("/api/dev/features", dependencies=[Depends(features.require_dev_mode)])
+def dev_toggle(body: FeatureToggle):
+    if body.name not in features.FEATURES:
+        raise HTTPException(422, f"Unknown feature: {body.name}")
+    features.set_override(body.name, body.enabled)
+    store.log("", f"Developer mode: {body.name} " + ("reset to deploy setting" if body.enabled is None else
+                                                     "on" if body.enabled else "off"), who="Developer")
+    return features.describe()
+
+
+@app.delete("/api/dev/features", dependencies=[Depends(features.require_dev_mode)])
+def dev_reset():
+    features.clear_overrides()
+    return features.describe()
 
 
 @app.get("/api/health")

@@ -26,11 +26,16 @@ approve or reject, contact details after approval, and the audit trail. Each ext
 | `FEATURE_INVITATION_LETTER` | off | Draft invitation letter after a patient is approved |
 | `FEATURE_FHIR_EXPORT` | off | SNOMED CT column on the criteria table and the FHIR R5 download |
 | `FEATURES_ALL` | unset | `true` or `false` sets every extra at once; a `FEATURE_` flag still wins over it |
+| `ADVOLARE_DEV_MODE` | on | Footer toggles for each extra (developer mode, below) |
 
 Values are `true`/`false` (also `1`/`0`, `yes`/`no`, `on`/`off`). Empty or anything else keeps the default.
 When an extra is off, the pages hide it (they read `GET /api/features`) and its API routes return 404.
 Flags are read on every request, so a restart picks up a change; no rebuild is needed.
 
+- **In the browser (developer mode):** while `ADVOLARE_DEV_MODE` is on (the default for now), every page's footer
+  has a checkbox per extra and a "Use deploy settings" button. A toggle is held in memory by the server: it wins over
+  the env flags, applies to everyone using that server, changes the page in place, and is lost on restart.
+  Set `ADVOLARE_DEV_MODE=false` to hide the toggles; `/api/dev/features` then returns 404.
 - **Locally:** `FEATURES_ALL=true uvicorn api.main:app --port 8000`
 - **On the Spark:** uncomment lines in `deploy/features.env` and push to master (the deploy workflow redeploys),
   or put the same lines in `~/trialmatch/features.env` on the Spark and rerun `bash ~/trialmatch/deploy/deploy.sh`.

@@ -26,7 +26,8 @@ NEW_STUDY = {
 @pytest.fixture(autouse=True)
 def fresh_store(monkeypatch):
     store.reset()
-    for name in ["FEATURES_ALL", *(f"FEATURE_{n.upper()}" for n in features.FEATURES)]:
+    features.clear_overrides()
+    for name in ["FEATURES_ALL", "ADVOLARE_DEV_MODE", *(f"FEATURE_{n.upper()}" for n in features.FEATURES)]:
         monkeypatch.delenv(name, raising=False)
 
 
@@ -218,3 +219,32 @@ def test_do_not_contact_flag_controls_funnel(monkeypatch):
     monkeypatch.setenv("FEATURE_DO_NOT_CONTACT", "false")
     run_screening()
     assert client.get("/api/studies/S-001/results").json()["funnel"]["removed_before_screening"] == []
+
+
+# ---------- Developer mode toggles ----------
+def test_dev_toggle_overrides_env_and_resets(monkeypatch):
+    run_screening()
+    assert client.get("/api/studies/S-001/fairness").status_code == 404
+    rows = client.post("/api/dev/features", json={"name": "fairness", "enabled": True}).json()
+    assert {r["name"]: r["source"] for r in rows}["fairness"] == "developer toggle"
+    assert client.get("/api/features").json()["fairness"] is True
+    assert client.get("/api/studies/S-001/fairness").status_code == 200
+    monkeypatch.setenv("FEATURE_FAIRNESS", "false")  # toggle still wins over the env flag
+    assert client.get("/api/studies/S-001/fairness").status_code == 200
+    client.post("/api/dev/features", json={"name": "fairness", "enabled": None})
+    assert client.get("/api/studies/S-001/fairness").status_code == 404
+    client.post("/api/dev/features", json={"name": "fhir_export", "enabled": True})
+    client.delete("/api/dev/features")
+    assert client.get("/api/features").json()["fhir_export"] is False
+
+
+def test_dev_toggle_rejects_unknown_feature():
+    assert client.post("/api/dev/features", json={"name": "nope", "enabled": True}).status_code == 422
+
+
+def test_dev_mode_off_hides_toggles_and_ignores_overrides(monkeypatch):
+    client.post("/api/dev/features", json={"name": "what_if", "enabled": True})
+    monkeypatch.setenv("ADVOLARE_DEV_MODE", "false")
+    assert client.get("/api/dev/features").status_code == 404
+    assert client.post("/api/dev/features", json={"name": "what_if", "enabled": True}).status_code == 404
+    assert client.get("/api/features").json()["what_if"] is False

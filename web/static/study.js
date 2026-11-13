@@ -322,8 +322,17 @@
       : `<p>Nothing has happened on this study yet.</p>`);
   }
 
+  A.onFeaturesChanged = async () => {
+    // Re-render in place with the new switches; no reload, and the open patient stays open.
+    await loadStudy();
+    if (S.run) renderResults();
+    const mrn = new URLSearchParams(location.search).get("patient");
+    if (mrn && S.run) await showPatient(mrn, false);
+  };
+
   (async () => {
     await A.features();
+    A.devPanel();
     if (!(await loadStudy())) return;
     const hasRun = await loadResults();
     screeningPanel(hasRun);

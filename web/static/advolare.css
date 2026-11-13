@@ -35,3 +35,6 @@ a.nhsuk-header__service-name:hover { text-decoration: underline; }
 .nhsuk-table-container { overflow-x: auto; }
 .adv-no-tabs .nhsuk-tabs__title { display: none; }
 .adv-no-tabs .nhsuk-tabs__panel { border: 0; padding: 0; margin: 0; background: none; }
+.adv-dev { border-bottom: 1px solid var(--nhs-grey-3); padding-bottom: 16px; margin-bottom: 24px; }
+.adv-dev-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 0 24px; }
+.adv-dev-grid .nhsuk-checkboxes__item { margin: 0 0 8px; }
