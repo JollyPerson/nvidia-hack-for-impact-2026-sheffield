@@ -162,3 +162,17 @@ def test_cache_reloads_facts_into_a_rebuilt_warehouse(db, tmp_path):
     conn = _conn(fresh)
     assert facts.fact_verdict(conn, "P002", STUDY.criteria[1]).verdict == VerdictValue.met
     conn.close()
+
+
+def test_no_without_a_negation_in_the_quote_becomes_not_mentioned():
+    note = "PC: Fever. Hx: COPD, obesity. Obs: RR 21, HR 90. Alert. PMH: Nil significant. No peripheral oedema."
+    got = facts.parse_extraction(json.dumps({
+        "copd_home_oxygen": {"value": "no", "quote": "Hx: COPD"},
+        "immunosuppressed": {"value": "no", "quote": "Alert"},
+        "acs_cause": {"value": "no", "quote": "Obs: RR 21, HR 90"},
+        "lacks_capacity_or_eol": {"value": "no", "quote": "PMH: Nil significant"},
+        "hf_iv_diuretics": {"value": "no", "quote": "No peripheral oedema"},
+        "pneumonia_radiological": {"value": "not_mentioned", "quote": ""},
+    }), note)
+    assert got["copd_home_oxygen"] == got["immunosuppressed"] == got["acs_cause"] == ("not_mentioned", "")
+    assert got["lacks_capacity_or_eol"][0] == got["hf_iv_diuretics"][0] == "no"

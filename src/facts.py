@@ -119,7 +119,9 @@ def has_table(conn) -> bool:
 EXTRACT_SYSTEM = """You read ONE clinical note and answer a fixed list of questions about the patient.
 For each question answer with:
 - "yes": the note directly states it is true for this patient;
-- "no": the note directly states it is false (e.g. "no COPD", "not on home oxygen", "CXR clear");
+- "no": the note EXPLICITLY negates it (e.g. "no COPD", "not on home oxygen", "CXR clear", "PMH: nil",
+  "troponin negative"). The quote must contain that negation. A note that lists other conditions, or
+  says "Alert", or gives normal observations, does NOT say no: answer "not_mentioned";
 - "uncertain": the note raises it but is equivocal ("?", "query", "possible", "awaited");
 - "not_mentioned": the note does not address it. A note that does not mention a topic is NOT a "no".
 For yes, no and uncertain, "quote" MUST be the exact words copied from the note that show it (a short
@@ -144,6 +146,11 @@ def extraction_messages(note_text: str, facts: list[Fact] = FACTS) -> list[dict]
     ]
 
 
+# A "no" is kept only when its quote itself negates something; otherwise the note just doesn't mention it.
+NEGATION = re.compile(r"\b(no|not|nil|none|never|denies|denied|negative|neg|clear|without|absent|"
+                      r"ruled out|r/o|excluded|unremarkable|normal)\b|\bn/?a\b", re.I)
+
+
 def parse_extraction(text: str | None, note_text: str, facts: list[Fact] = FACTS) -> dict[str, tuple[str, str]]:
     """Model reply -> {fact_key: (value, quote)}. Code checks every quote is really in the note:
     a yes / no / uncertain whose quote is missing or not found is stored as UNVERIFIED (live fallback)."""
@@ -163,6 +170,8 @@ def parse_extraction(text: str | None, note_text: str, facts: list[Fact] = FACTS
         if value == "not_mentioned":
             out[f.key] = (value, "")
         elif quote and _norm(quote) in note:
+            if value == "no" and not NEGATION.search(quote):
+                value, quote = "not_mentioned", ""  # code rule: a "no" must quote an explicit negation
             out[f.key] = (value, quote)
         else:
             out[f.key] = (UNVERIFIED, quote)
