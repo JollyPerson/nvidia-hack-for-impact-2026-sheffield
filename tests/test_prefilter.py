@@ -319,17 +319,9 @@ def test_demo_study_on_warehouse(demo):
     assert list(result.removed_by_criterion) == structured
     assert result.patients_considered == len(result.candidates) + sum(result.removed_by_criterion.values())
     conn = connect_readonly()
-    if demo is PNEUMONIA:
-        assert result.candidates, "expected pneumonia candidates"
-    else:
-        # Cross-check against plain SQL: the generator currently has no heart failure admission in
-        # the last 7 days, so nobody has an NT-proBNP >= 2000 in the window and C3 removes everyone left.
-        with_bnp = conn.execute(
-            "SELECT COUNT(DISTINCT LocalPatientIdentifier) FROM Pathology WHERE TestCode = 'NTBNP' "
-            "AND Value >= 2000 AND CollectedDateTime > ? AND CollectedDateTime <= ?",
-            ("2026-11-06T09:00:00", "2026-11-13T09:00:00"),
-        ).fetchone()[0]
-        assert len(result.candidates) <= with_bnp
+    # Both demo studies find someone (HOMESTEP-HF's NT-proBNP window is 90 days: the generator's latest
+    # NT-proBNP results are from late October, so the original 7-day window removed everyone).
+    assert result.candidates, f"expected {demo.short_title} candidates"
 
     # Every citation points at a real row for that patient and quotes what is stored there
     lookup = {"Patients": ("LocalPatientIdentifier", None), "Pathology": ("PathologyID", "Value"),

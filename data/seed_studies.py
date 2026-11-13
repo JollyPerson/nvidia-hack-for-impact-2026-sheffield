@@ -83,8 +83,11 @@ HEART_FAILURE = Study(
           field="age", operator=">=", value=18),
         C(id="C2", type="inclusion", kind="notes",
           description="Admitted with new or worsening heart failure needing intravenous diuretics"),
-        C(id="C3", type="inclusion", kind="structured", description="NT-proBNP of 2000 ng/L or more in the last 7 days",
-          field="ntprobnp", operator=">=", value=2000, time_window_days=7),
+        # 90 days, not 7: the warehouse's latest NT-proBNP results are from late October, so 7 days found nobody.
+        C(id="C3", type="inclusion", kind="structured", description="NT-proBNP of 2000 ng/L or more in the last 90 days",
+          field="ntprobnp", operator=">=", value=2000, time_window_days=90),
+        C(id="C8", type="inclusion", kind="structured", description="Primary diagnosis of heart failure (ICD-10 I50)",
+          field="primary_diagnosis", operator="==", value="I50"),
         C(id="C4", type="exclusion", kind="structured", description="eGFR below 20 in the last 90 days",
           field="egfr", operator="<", value=20, time_window_days=90),
         C(id="C5", type="exclusion", kind="structured", description="Systolic blood pressure below 90 on admission",
