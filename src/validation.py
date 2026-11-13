@@ -7,20 +7,11 @@ The caller passes a read-only connection to data/warehouse.db.
 import re
 import sqlite3
 
-from src.models import Citation, Flag, FlagType, PatientResult
+from src.models import Citation, Flag, FlagType, PatientResult, VerdictValue
 
-# Tables a model may cite, and each one's ID column.
-# PatientContacts is deliberately missing, so it can never be cited.
-ID_COLUMN = {
-    "Patients": "LocalPatientIdentifier",
-    "Inpatients": "EncounterID",
-    "ECDS": "EncounterID",
-    "Observations": "ObservationID",
-    "Pathology": "PathologyID",
-    "Diagnoses": "DiagnosisID",
-    "Procedures": "ProcedureID",
-    "ClinicalNotes": "NoteID",
-}
+# The list of citable tables (PatientContacts deliberately absent) lives in
+# src/tools.py, shared with screening so the two can never disagree.
+from src.tools import CITABLE_TABLES, resolve_table
 
 
 def _norm(text) -> str:
@@ -28,27 +19,34 @@ def _norm(text) -> str:
     return re.sub(r"\s+", " ", str(text)).strip().lower()
 
 
+def _clean_quote(quote: str) -> str:
+    """Drop the '…' the tools add when they shorten a long note, plus stray quote marks."""
+    return _norm(quote).strip(" .…\"'")
+
+
 def check_citation(conn: sqlite3.Connection, c: Citation, patient_id: str) -> str | None:
     """Returns None if the citation is genuine, otherwise the reason it failed."""
-    id_col = ID_COLUMN.get(c.table)
-    if id_col is None:
+    table = resolve_table(c.table)  # accepts "clinicalnotes", "ClinicalNote", ...
+    if table is None:
         return "this table cannot be cited"
 
     row = conn.execute(
-        f'SELECT * FROM "{c.table}" WHERE "{id_col}" = ?', (c.record_id,)
+        f'SELECT * FROM "{table}" WHERE "{CITABLE_TABLES[table]}" = ?', (c.record_id,)
     ).fetchone()
     if row is None:
         return "record does not exist"
     if row["LocalPatientIdentifier"] != patient_id:
         return "record belongs to a different patient"
-    if c.field not in row.keys() or row[c.field] is None:
+
+    field = next((k for k in row.keys() if k.lower() == c.field.strip().lower()), None)
+    if field is None or row[field] is None:
         return "field is missing or empty"
 
-    stored = row[c.field]
+    stored, quote = row[field], _clean_quote(c.quote)
     if isinstance(stored, (int, float)):  # numbers: the quote must contain the stored value
-        ok = any(float(n) == stored for n in re.findall(r"\d+(?:\.\d+)?", c.quote))
+        ok = any(float(n) == stored for n in re.findall(r"\d+(?:\.\d+)?", quote))
     else:  # text: the quote must appear in the stored text
-        ok = len(_norm(c.quote)) >= 3 and _norm(c.quote) in _norm(stored)
+        ok = len(quote) >= 3 and quote in _norm(stored)
     return None if ok else "quote does not match the record"
 
 
@@ -66,7 +64,12 @@ def validate_patient(conn: sqlite3.Connection, result: PatientResult) -> Patient
                             detail=f"{c.table} {c.record_id}: {problem}",
                         )
                     )
-        if a.stage1 and a.stage2 and a.stage1.verdict != a.stage2.verdict:
+        # A real contradiction is met vs not_met. Stage 1 saying `insufficient` is not a
+        # disagreement: AGENTS.md has it pass uncertain cases on for stage 2 to settle.
+        if a.stage1 and a.stage2 and {a.stage1.verdict, a.stage2.verdict} == {
+            VerdictValue.met,
+            VerdictValue.not_met,
+        }:
             a.flags.append(
                 Flag(type=FlagType.stage_disagreement, detail="screener and verifier disagree")
             )

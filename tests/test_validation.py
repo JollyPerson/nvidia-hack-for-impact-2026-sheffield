@@ -68,6 +68,11 @@ def cite(table, record_id, field, quote):
         cite("Pathology", "L1", "Value", "CRP 145 mg/L"),
         cite("Diagnoses", "D1", "Description", "pneumonia"),
         cite("Patients", "P1", "DateOfBirth", "1950-03-02"),
+        # How real models write citations (matches src/tools.py and the screening prompts)
+        cite("clinicalnotes", "N1", "NoteText", "home O2 2L"),  # table name in lower case
+        cite("ClinicalNote", "N1", "notetext", "home O2 2L"),  # singular table, field in lower case
+        cite("ClinicalNotes", "N1", "NoteText", "…COPD on home O2 2L"),  # '…' from a shortened note
+        cite("ClinicalNotes", "N1", "NoteText", "\"No hx of MI.\""),  # wrapped in quote marks
     ],
 )
 def test_genuine_citation_passes(conn, citation):
@@ -88,6 +93,8 @@ def test_genuine_citation_passes(conn, citation):
         (cite("Observations", "O1", "Temperature", "37.2"), "field is missing or empty"),
         (cite("Observations", "O1", "MadeUpField", "1"), "field is missing or empty"),
         (cite("PatientContacts", "P1", "MobileNumber", "07700 900123"), "this table cannot be cited"),
+        (cite("patientcontacts", "P1", "MobileNumber", "07700 900123"), "this table cannot be cited"),
+        (cite("ClinicalNotes", "N1", "NoteText", "…"), "quote does not match the record"),
         (cite("Medications", "M1", "Drug", "salbutamol"), "this table cannot be cited"),
     ],
 )
@@ -139,6 +146,26 @@ def test_disagreement_is_flagged(conn):
     )
     flags = validate_patient(conn, result).assessments[0].flags
     assert [f.type for f in flags] == [FlagType.stage_disagreement]
+
+
+def test_stage1_insufficient_then_stage2_answer_is_not_a_disagreement(conn):
+    # Seen with the real models on the five test patients: the screener passes an
+    # uncertain criterion on, and the verifier settles it. That is the design, not a conflict.
+    good = cite("ClinicalNotes", "N1", "NoteText", "No hx of MI")
+    result = PatientResult(
+        study_id="S1",
+        patient_id="P1",
+        assessments=[
+            CriterionAssessment(criterion_id="C1", stage1=verdict("insufficient", good), stage2=verdict("not_met", good))
+        ],
+    )
+    assert validate_patient(conn, result).assessments[0].flags == []
+
+
+def test_empty_search_result_cited_as_evidence_is_caught(conn):
+    # Seen with the real models: the verifier cited an empty tool result as a "record".
+    fake = cite("Diagnoses", "N/A", "rows", "[]")
+    assert check_citation(conn, fake, "P1") == "record does not exist"
 
 
 def test_not_shortlisted_and_insufficient_are_handled(conn):
