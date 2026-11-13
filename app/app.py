@@ -2,9 +2,10 @@
 
 All data comes from mock_data.py. Swap those functions for the real pipeline later.
 
-Visual language: NHS design system colours and components (inset text, tags, summary list,
-warning callout) for the clinical parts, NVIDIA green only for the on-device / DGX Spark signal.
-No NHS logo is used and no endorsement is implied.
+Styled to the NHS design system (service-manual.nhs.uk/design-system): colour palette and roles,
+typography (Frutiger, Arial fallback, 19px body), responsive spacing scale, and components
+(header, breadcrumbs, buttons, tags, tables, summary list, inset text, warning callout, cards,
+details, task list, tabs, footer). The NHS logo is not used and no NHS endorsement is implied.
 """
 import html
 import time
@@ -13,135 +14,203 @@ import streamlit as st
 
 import mock_data as data
 
-st.set_page_config(page_title="TrialMatch", page_icon="🧬", layout="wide")
+st.set_page_config(page_title="TrialMatch", page_icon=None, layout="wide")
 
-# NHS palette (service-manual.nhs.uk/design-system/styles/colour)
+# Colour values: service-manual.nhs.uk/design-system/styles/colour
+# Spacing (desktop): 4 8 16 24 32 40 48 56 64. Type scale: 48 36 26 22 19 16 14.
 CSS = """
 <style>
-:root{--blue:#005eb8;--dblue:#003087;--pblue:#ccdff1;--text:#212b32;--grey1:#4c6272;--grey2:#768692;
---grey4:#d8dde0;--grey5:#f0f4f5;--green:#007f3b;--pgreen:#cce5d8;--dgreen:#004c23;--red:#d5281b;--pred:#f7d4d1;
---dred:#801810;--wy:#ffb81c;--pwy:#fff1d2;--dwy:#664a0b;--yellow:#ffeb3b;--pyellow:#fff9c4;--nv:#76b900;}
-html, body, [class*="css"], .stMarkdown, button, input, select {font-family: Arial, "Helvetica Neue", sans-serif;}
+:root{
+--text:#212b32; --secondary:#4c6272; --link:#005eb8; --link-hover:#7c2855; --link-visited:#330072; --link-active:#002f5c;
+--focus:#ffeb3b; --focus-text:#212b32; --border:#d8dde0; --input-border:#4c6272; --error:#d5281b; --success:#007f3b;
+--button:#007f3b; --button-shadow:#004c23; --sec-button:#005eb8; --bg:#f0f4f5; --white:#ffffff;
+--blue:#005eb8; --dark-blue:#003087; --pale-blue:#ccdff1; --green:#007f3b; --dark-green:#004c23; --pale-green:#cce5d8;
+--red:#d5281b; --dark-red:#801810; --pale-red:#f7d4d1; --yellow:#ffeb3b; --pale-yellow:#fff9c4;
+--warm-yellow:#ffb81c; --dark-warm-yellow:#664a0b; --pale-warm-yellow:#fff1d2;
+--aqua:#00a499; --dark-aqua:#004a45; --pale-aqua:#bae6e3; --purple:#5c338e; --dark-purple:#330072; --pale-purple:#ded6e8;
+--grey-1:#4c6272; --grey-2:#768692; --grey-3:#aeb7bd; --grey-4:#d8dde0; --grey-5:#f0f4f5;
+}
+html, body, .stApp, .stMarkdown, .stMarkdown *, button, input, select, textarea, label, label p{font-family:"Frutiger W01", Arial, sans-serif;}
+[data-testid="stIconMaterial"], .material-symbols-rounded{font-family:"Material Symbols Rounded" !important;}
+.stApp{background:var(--bg); color:var(--text);}
 [data-testid="stHeader"]{display:none;}
-.block-container{padding-top:0 !important; max-width:1320px;}
-[data-testid="stSidebar"]{background:#fff; border-right:1px solid var(--grey4);}
-/* top bar, NHS header style without logo */
-.topbar{background:var(--blue); color:#fff; margin:0 -5rem 0 -5rem; padding:14px 5rem; margin-top:-1rem; display:flex; align-items:center; gap:18px;}
-.topbar .brand{font-weight:700; font-size:1.35rem; letter-spacing:-0.01em;}
-.topbar .sub{opacity:.85; font-size:.95rem; border-left:1px solid #ffffff55; padding-left:18px;}
-.topbar .pill{margin-left:auto; background:#00000033; border:1px solid #ffffff44; border-radius:999px; padding:5px 12px; font-size:.82rem; font-weight:700;}
-.topbar .dot{display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--nv); margin-right:6px; box-shadow:0 0 0 3px #76b90044;}
-.crumbs{color:var(--grey1); font-size:.85rem; margin:18px 0 2px;}
-h1.title{font-size:1.9rem; color:var(--text); margin:0 0 4px; line-height:1.2;}
-.meta{color:var(--grey1); font-size:.92rem; margin-bottom:14px;}
-/* KPI cards */
-.kpis{display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin:6px 0 18px;}
-.kpi{background:#fff; border:1px solid var(--grey4); border-radius:10px; padding:14px 16px;}
-.kpi .l{color:var(--grey1); font-size:.8rem; font-weight:700; text-transform:uppercase; letter-spacing:.03em;}
-.kpi .v{font-size:1.9rem; font-weight:700; color:var(--text); margin-top:4px;}
-.kpi .s{font-size:.8rem; color:var(--grey1);}
-.kpi.nv{border-color:#76b90088; background:linear-gradient(180deg,#76b90010,#fff);}
-.kpi.nv .v{color:#3f6212;}
-/* cards */
-.card{background:#fff; border:1px solid var(--grey4); border-radius:10px; padding:18px 20px; margin-bottom:14px;}
-.card h3{font-size:1.05rem; margin:0 0 12px; color:var(--text);}
-/* NHS tags */
-.tag{display:inline-block; white-space:nowrap; padding:2px 8px; border:1px solid; font-size:.76rem; font-weight:700; margin-right:4px; border-radius:2px;}
-.t-blue{background:var(--pblue); color:var(--dblue); border-color:#99bfe3;}
-.t-red{background:var(--pred); color:var(--dred); border-color:#eaa9a3;}
-.t-green{background:var(--pgreen); color:var(--dgreen); border-color:#99cbb1;}
-.t-grey{background:#fff; color:var(--grey1); border-color:var(--grey4);}
-.t-warm{background:var(--pwy); color:var(--dwy); border-color:#ffd889;}
-.t-purple{background:#ded6e8; color:#330072; border-color:#bdaed1;}
-/* criteria list */
-.crow{display:flex; gap:12px; padding:10px 0; border-bottom:1px solid var(--grey4); align-items:flex-start;}
-.crow:last-child{border-bottom:none;}
-.cid{font-weight:700; color:var(--blue); width:28px; flex:none;}
-.ctext{flex:1; color:var(--text);}
-.ctext code{font-size:.78rem; background:var(--grey5); color:var(--text);}
-/* NHS inset text */
-.inset{border-left:8px solid var(--blue); padding:10px 16px; background:#fff; color:var(--text); font-size:.95rem; line-height:1.55;}
-/* agent timeline */
-.tl{position:relative; padding-left:34px;}
-.tl:before{content:""; position:absolute; left:13px; top:8px; bottom:8px; width:2px; background:var(--grey4);}
-.step{position:relative; background:#fff; border:1px solid var(--grey4); border-radius:10px; padding:12px 16px; margin-bottom:12px;}
-.step .node{position:absolute; left:-34px; top:12px; width:28px; height:28px; border-radius:50%; background:var(--green); color:#fff; font-weight:700; font-size:.85rem; display:flex; align-items:center; justify-content:center; box-shadow:0 0 0 4px var(--grey5);}
-.step .hd{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
-.step .name{font-weight:700; color:var(--text);}
-.step .ms{margin-left:auto; color:var(--grey1); font-size:.82rem; font-variant-numeric:tabular-nums;}
-.step .bar{height:4px; background:var(--grey5); border-radius:2px; margin:8px 0 6px;}
-.step .bar i{display:block; height:4px; background:var(--blue); border-radius:2px;}
-.step .dt{color:var(--grey1); font-size:.88rem;}
-.step code{font-size:.76rem; background:var(--grey5); color:var(--text); padding:1px 5px; border-radius:3px;}
-/* funnel */
-.fr{margin:10px 0;}
-.fr .fl{display:flex; justify-content:space-between; font-size:.86rem; color:var(--text); margin-bottom:4px;}
-.fr .fl b{font-variant-numeric:tabular-nums;}
-.fr .fb{height:12px; background:var(--grey5); border-radius:6px;}
-.fr .fb i{display:block; height:12px; border-radius:6px; background:var(--blue);}
-/* shortlist table */
-table.sl{width:100%; border-collapse:collapse; background:#fff; font-size:.9rem;}
-table.sl th{text-align:left; color:var(--grey1); font-size:.76rem; text-transform:uppercase; letter-spacing:.03em; padding:10px 12px; border-bottom:2px solid var(--grey4);}
-table.sl td{padding:12px; border-bottom:1px solid var(--grey4); vertical-align:middle; color:var(--text);}
-table.sl tr.ex td{background:#fdf5f4;}
-.av{width:34px; height:34px; border-radius:50%; background:var(--pblue); color:var(--dblue); font-weight:700; display:inline-flex; align-items:center; justify-content:center; margin-right:10px; font-size:.8rem;}
-.pname{font-weight:700;} table.sl td:first-child{min-width:250px;} .pid{color:var(--grey1); font-size:.8rem;}
-.score{display:flex; align-items:center; gap:8px; min-width:120px;}
-.score .tr{flex:1; height:6px; background:var(--grey5); border-radius:3px;} .score .tr i{display:block; height:6px; border-radius:3px; background:var(--green);}
-.dots span{display:inline-block; width:22px; height:22px; line-height:20px; text-align:center; border-radius:3px; font-size:.7rem; font-weight:700; margin-right:2px; border:1px solid;}
-.d-MET{background:var(--pgreen); color:var(--dgreen); border-color:#99cbb1;}
-.d-NOT_MET{background:#fff; color:var(--grey2); border-color:var(--grey4);}
-.d-UNKNOWN{background:var(--pwy); color:var(--dwy); border-color:#ffd889;}
-.d-EXCL{background:var(--pred); color:var(--dred); border-color:#eaa9a3;}
-/* review */
-.qhead{font-size:.8rem; color:var(--grey1); font-weight:700; text-transform:uppercase; letter-spacing:.03em; margin-bottom:6px;}
-div[role="radiogroup"]{width:100%;}
-div[role="radiogroup"] label{background:#fff; border:1px solid var(--grey4); border-radius:8px; padding:10px 12px !important; margin-bottom:6px; width:100%;}
-div[role="radiogroup"] label:has(input:checked){border-color:var(--blue); box-shadow:inset 4px 0 0 var(--blue);}
-.summ{display:grid; grid-template-columns:150px 1fr; gap:0; border-top:1px solid var(--grey4); margin-top:8px;}
-.summ div{padding:8px 0; border-bottom:1px solid var(--grey4); font-size:.92rem;}
-.summ .k{font-weight:700; color:var(--text);}
-.ev{border:1px solid var(--grey4); border-radius:10px; background:#fff; padding:14px 16px; margin-bottom:10px;}
-.ev.bad{border-color:var(--red); box-shadow:inset 6px 0 0 var(--red);}
-.ev .row1{display:flex; align-items:center; gap:8px; flex-wrap:wrap;}
-.ev .ct{font-weight:700; color:var(--text); flex:1; min-width:200px;}
-.ev .conf{color:var(--grey1); font-size:.8rem;}
-.ev .src{color:var(--grey1); font-size:.8rem; margin:8px 0 6px;}
-.ev .inset{font-family:Arial, sans-serif; font-size:.9rem; border-left-width:6px; background:var(--grey5);}
-.ev mark{background:var(--yellow); color:var(--text); padding:0 2px; box-shadow:0 2px 0 var(--text);}
-.warn{background:var(--pwy); border-left:6px solid var(--wy); padding:8px 12px; font-size:.86rem; color:var(--text); margin-top:8px;}
-.decision{border-radius:10px; padding:12px 14px; font-weight:700; margin-bottom:10px; border:1px solid var(--grey4); background:#fff;}
-.decision.ok{background:var(--pgreen); border-color:#99cbb1; color:var(--dgreen);}
-.decision.no{background:var(--pred); border-color:#eaa9a3; color:var(--dred);}
-/* buttons: NHS green primary, blue outline secondary */
-.stButton button[kind="primary"]{background:var(--green); border:none; box-shadow:0 4px 0 var(--dgreen); border-radius:4px; font-weight:700;}
-.stButton button[kind="primary"]:hover{background:#00662f;}
-.stButton button[kind="secondary"]{border:2px solid var(--blue); color:var(--blue); border-radius:4px; font-weight:700; background:#fff;}
-button:focus-visible{outline:3px solid var(--yellow) !important; box-shadow:0 4px 0 var(--text) !important;}
-/* tabs */
-.stTabs [data-baseweb="tab-list"]{gap:4px; border-bottom:1px solid var(--grey4);}
-.stTabs [data-baseweb="tab"]{font-weight:700; color:var(--blue); padding:10px 14px;}
-.stTabs [aria-selected="true"]{color:var(--text);}
-/* sidebar device panel */
-.spark{border:1px solid #76b90066; border-radius:10px; padding:12px 14px; background:linear-gradient(180deg,#76b90014,#fff); font-size:.85rem; color:var(--text);}
-.spark .h{font-weight:700; color:#3f6212; margin-bottom:6px;}
-.spark .r{display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px dashed #76b90033;}
-.spark .r:last-child{border:none;}
-.spark .mem{height:6px; background:#e5e7eb; border-radius:3px; margin:6px 0 2px;} .spark .mem i{display:block; height:6px; background:var(--nv); border-radius:3px;}
-.foot{margin-top:28px; padding:14px 0; border-top:1px solid var(--grey4); font-size:.82rem; color:var(--grey1);}
+.block-container{padding:0 32px 48px !important; max-width:1280px;}
+.stMarkdown p, .stMarkdown li{font-size:19px; line-height:28px;}
+
+/* Header */
+.nhs-header{background:var(--blue); margin:0 -32px; padding:16px 32px; display:flex; align-items:center; gap:24px; flex-wrap:wrap;}
+.nhs-header__service{color:var(--white); font-size:22px; line-height:30px; font-weight:700;}
+.nhs-header__org{color:var(--white); font-size:16px; line-height:24px;}
+.nhs-header__status{margin-left:auto; background:var(--white); color:var(--dark-aqua); border:1px solid var(--aqua); font-size:16px; font-weight:700; padding:4px 8px;}
+.nhs-header__nav{background:var(--blue); margin:0 -32px; padding:0 32px 8px; border-top:1px solid var(--pale-blue);}
+.nhs-header__nav span{display:inline-block; color:var(--white); font-size:16px; padding:8px 24px 0 0; font-weight:700;}
+
+/* Breadcrumbs */
+.nhs-breadcrumb{font-size:16px; line-height:24px; padding:16px 0 0; color:var(--text);}
+.nhs-breadcrumb a, .nhs-link{color:var(--link); text-decoration:underline;}
+.nhs-breadcrumb .chev{color:var(--grey-2); margin:0 8px;}
+
+/* Type */
+.nhs-caption-l{color:var(--secondary); font-size:22px; line-height:30px; margin-top:24px;}
+.stApp .nhs-heading-l, .stApp .nhs-heading-m, .stApp .nhs-heading-s, .stApp .stApp .nhs-heading-xs{padding:0 !important; letter-spacing:0; font-family:"Frutiger W01", Arial, sans-serif;}
+.stApp .nhs-heading-l{font-size:36px; line-height:42px; font-weight:700; margin:4px 0 16px; color:var(--text);}
+.stApp .nhs-heading-m{font-size:26px; line-height:32px; font-weight:700; margin:0 0 16px; color:var(--text);}
+.stApp .nhs-heading-s{font-size:22px; line-height:30px; font-weight:700; margin:0 0 16px; color:var(--text);}
+.stApp .nhs-heading-xs{font-size:19px; line-height:28px; font-weight:700; margin:0 0 8px; color:var(--text);}
+.nhs-body{font-size:19px; line-height:28px; color:var(--text); margin:0 0 16px;}
+.nhs-body-s{font-size:16px; line-height:24px; color:var(--text); margin:0 0 16px;}
+.nhs-secondary{color:var(--secondary);}
+a{color:var(--link);} a:visited{color:var(--link-visited);} a:hover{color:var(--link-hover);} a:active{color:var(--link-active);}
+
+/* Tags */
+.nhs-tag{display:inline-block; white-space:nowrap; font-size:14px; line-height:20px; font-weight:700; padding:4px 8px; border:1px solid; margin:0 4px 4px 0;}
+.tag-blue{background:var(--pale-blue); color:var(--dark-blue); border-color:var(--blue);}
+.tag-white{background:var(--white); color:var(--text); border-color:var(--text);}
+.tag-grey{background:var(--grey-5); color:var(--grey-1); border-color:var(--grey-2);}
+.tag-green{background:var(--pale-green); color:var(--dark-green); border-color:var(--green);}
+.tag-aqua{background:var(--pale-aqua); color:var(--dark-aqua); border-color:var(--aqua);}
+.tag-purple{background:var(--pale-purple); color:var(--dark-purple); border-color:var(--purple);}
+.tag-red{background:var(--pale-red); color:var(--dark-red); border-color:var(--red);}
+.tag-yellow{background:var(--pale-warm-yellow); color:var(--dark-warm-yellow); border-color:var(--warm-yellow);}
+
+/* Cards */
+.nhs-card{background:var(--white); border:1px solid var(--border); padding:32px; margin-bottom:32px;}
+.nhs-card--feature{position:relative; margin-top:24px; padding-top:40px;}
+.nhs-card--feature .nhs-card__tab{position:absolute; top:-20px; left:32px; background:var(--blue); color:var(--white); font-size:22px; line-height:30px; font-weight:700; padding:4px 24px;}
+.nhs-card--stat{padding:24px; margin-bottom:24px; height:100%;}
+.nhs-card--stat .label{font-size:19px; line-height:28px; color:var(--text); font-weight:700;}
+.nhs-card--stat .value{font-size:36px; line-height:42px; white-space:nowrap; font-weight:700; color:var(--text);}
+.nhs-card--stat .hint{font-size:16px; line-height:24px; color:var(--secondary);}
+.nhs-card--device{border-top:4px solid var(--aqua);}
+.stats{display:grid; grid-template-columns:repeat(5,1fr); gap:24px; margin:24px 0 8px;}
+
+/* Inset text */
+.nhs-inset{border-left:8px solid var(--blue); padding:16px 24px; margin:16px 0 24px; background:var(--white); font-size:19px; line-height:28px; color:var(--text);}
+.nhs-inset p{margin:0 0 16px;} .nhs-inset p:last-child{margin:0;}
+.nhs-inset mark{background:var(--pale-yellow); color:var(--text); padding:0 2px; box-shadow:0 2px 0 var(--warm-yellow);}
+
+/* Warning callout */
+.nhs-warning{background:var(--pale-yellow); border:1px solid var(--yellow); margin:16px 0 0; padding:0 24px 16px; position:relative;}
+.nhs-warning__label{display:inline-block; background:var(--yellow); color:var(--text); font-size:19px; line-height:28px; font-weight:700; padding:4px 24px; margin:0 0 16px -24px;}
+.nhs-warning p{font-size:19px; line-height:28px; margin:0;}
+
+/* Error summary (used for exclusions) */
+.nhs-error-summary{border:4px solid var(--error); background:var(--white); padding:24px; margin-bottom:24px;}
+.nhs-error-summary h2{font-size:22px; line-height:30px; margin:0 0 8px; color:var(--text);}
+.nhs-error-summary p{font-size:19px; line-height:28px; margin:0; color:var(--error); font-weight:700;}
+
+/* Summary list */
+.nhs-summary{width:100%; border-collapse:collapse; margin:0 0 24px; font-size:19px; line-height:28px;}
+.nhs-summary th{text-align:left; font-weight:700; width:35%; padding:8px 16px 8px 0; border-bottom:1px solid var(--border); vertical-align:top;}
+.nhs-summary td{padding:8px 0; border-bottom:1px solid var(--border); vertical-align:top;}
+
+/* Table */
+.nhs-table{width:100%; border-collapse:collapse; background:var(--white); font-size:19px; line-height:28px;}
+.nhs-table caption{text-align:left; font-size:22px; line-height:30px; font-weight:700; padding-bottom:16px; color:var(--text);}
+.nhs-table th{text-align:left; font-weight:700; padding:8px 16px 8px 0; border-bottom:2px solid var(--grey-1); vertical-align:bottom;}
+.nhs-table td{padding:16px 16px 16px 0; border-bottom:1px solid var(--border); vertical-align:top;}
+.nhs-table td.num, .nhs-table th.num{text-align:right; font-variant-numeric:tabular-nums;}
+.nhs-table tr.excluded td:first-child{box-shadow:inset 4px 0 0 var(--error); padding-left:12px;}
+.marks span{display:inline-block; min-width:28px; text-align:center; font-size:14px; line-height:20px; font-weight:700; padding:2px 0; border:1px solid; margin:0 2px 2px 0;}
+.m-met{background:var(--pale-green); color:var(--dark-green); border-color:var(--green);}
+.m-not{background:var(--white); color:var(--grey-1); border-color:var(--grey-3);}
+.m-unk{background:var(--pale-warm-yellow); color:var(--dark-warm-yellow); border-color:var(--warm-yellow);}
+.m-exc{background:var(--pale-red); color:var(--dark-red); border-color:var(--red);}
+
+/* Task list (agent steps) */
+.nhs-task-list{list-style:none; padding:0; margin:0 0 24px; border-top:1px solid var(--border);}
+.nhs-task-list li{border-bottom:1px solid var(--border); padding:16px 0;}
+.nhs-task-list .row{display:flex; gap:16px; align-items:baseline; flex-wrap:wrap;}
+.nhs-task-list .name{font-size:19px; line-height:28px; font-weight:700; flex:1; min-width:220px;}
+.nhs-task-list .time{font-size:16px; color:var(--secondary); font-variant-numeric:tabular-nums;}
+.nhs-task-list .bar{height:8px; background:var(--grey-5); margin:8px 0;} .nhs-task-list .bar i{display:block; height:8px; background:var(--blue);}
+
+/* Details */
+details.nhs-details{margin:8px 0 0;}
+details.nhs-details summary{color:var(--link); text-decoration:underline; cursor:pointer; font-size:19px; line-height:28px;}
+details.nhs-details summary:hover{color:var(--link-hover);}
+details.nhs-details .nhs-details__text{border-left:4px solid var(--border); padding:16px 24px; margin-top:8px; font-size:19px; line-height:28px;}
+details.nhs-details code, .nhs-code{font-family:monospace; font-size:16px; background:var(--grey-5); padding:0 4px; color:var(--text);}
+
+/* Funnel chart (palette colours used directly for graph series) */
+.funnel .fr{margin:0 0 16px;} .funnel .fl{display:flex; justify-content:space-between; font-size:19px; line-height:28px;}
+.funnel .fb{height:16px; background:var(--grey-5);} .funnel .fb i{display:block; height:16px; background:var(--blue);}
+
+/* Buttons */
+.stButton button{font-size:19px !important; font-weight:700 !important; border-radius:4px !important; padding:12px 16px !important; min-height:auto !important;}
+.stButton button p{font-size:19px !important; font-weight:700 !important;}
+.stButton button[kind="primary"]{background:var(--button) !important; color:var(--white) !important; border:2px solid transparent !important; box-shadow:0 4px 0 var(--button-shadow) !important;}
+.stButton button[kind="primary"]:hover{background:var(--dark-green) !important;}
+.stButton button[kind="secondary"]{background:var(--white) !important; color:var(--sec-button) !important; border:2px solid var(--sec-button) !important; box-shadow:0 4px 0 var(--sec-button) !important;}
+.stButton button:active{transform:translateY(4px); box-shadow:none !important;}
+.stButton button:focus-visible{background:var(--focus) !important; color:var(--focus-text) !important; box-shadow:0 4px 0 var(--focus-text) !important; outline:none !important;}
+*:focus-visible{outline:4px solid var(--focus) !important; outline-offset:0 !important; box-shadow:0 4px 0 var(--focus-text) !important;}
+
+/* Form fields */
+.stTextInput label p, .stSelectbox label p, .stRadio > label p, .stToggle label p{font-size:19px !important; color:var(--text) !important;}
+[data-baseweb="input"], [data-baseweb="select"] > div{border:2px solid var(--input-border) !important; border-radius:0 !important; background:var(--white) !important;}
+[data-baseweb="input"]:focus-within, [data-baseweb="select"] > div:focus-within{outline:4px solid var(--focus) !important; box-shadow:inset 0 0 0 2px var(--text) !important;}
+input{background:var(--white) !important; color:var(--text) !important; font-size:19px !important;}
+[data-baseweb="select"] div{font-size:19px !important; color:var(--text) !important;}
+.stRadio [role="radiogroup"] label{padding:8px 0 !important;}
+.stRadio [role="radiogroup"] label p{font-size:19px !important;}
+
+/* Tabs (NHS tabs pattern) */
+.stTabs [role="tab"] *{font-size:19px !important;}
+[data-testid="stTextInputRootElement"]{border:2px solid var(--input-border) !important; border-radius:0 !important;}
+[data-testid="stTextInputRootElement"] [data-baseweb="input"]{border:none !important;}
+.stTabs [data-baseweb="tab-list"]{gap:0; border-bottom:1px solid var(--border);}
+.stApp table th, .stApp table td{border-left:none !important; border-right:none !important; border-top:none !important; background:transparent;}
+.stApp table{border:none !important;}
+.stTabs [data-baseweb="tab"], .stTabs button[role="tab"]{font-size:19px !important; color:var(--link); text-decoration:underline; padding:8px 24px; background:var(--grey-5); border:1px solid transparent; margin-right:4px;}
+.stTabs [data-baseweb="tab"] p, .stTabs button[role="tab"] p{font-size:19px !important;}
+.stTabs [data-baseweb="tab"]:hover{color:var(--link-hover);}
+.stTabs [aria-selected="true"]{color:var(--text) !important; text-decoration:none; background:var(--white); border-color:var(--border); border-bottom-color:var(--white); margin-bottom:-1px;}
+.stTabs [data-baseweb="tab-highlight"], .stTabs [data-baseweb="tab-border"]{display:none;}
+.stTabs [data-baseweb="tab-panel"]{padding-top:32px;}
+
+/* Sidebar */
+[data-testid="stSidebar"]{background:var(--white); border-right:1px solid var(--border);}
+[data-testid="stSidebar"] .nhs-card{padding:16px; margin-bottom:16px;}
+.device th, .device td{font-size:16px !important; line-height:24px !important;}
+.meter{height:8px; background:var(--grey-4); margin:8px 0;} .meter i{display:block; height:8px; background:var(--aqua);}
+
+/* Status (Streamlit) */
+[data-testid="stExpander"] details, [data-testid="stStatusWidget"]{border-radius:0 !important; border-color:var(--border) !important; background:var(--white);}
+
+/* Footer */
+.nhs-footer{background:var(--grey-4); margin:48px -32px 0; padding:24px 32px; font-size:16px; line-height:24px; color:var(--text);}
+.nhs-footer ul{list-style:none; padding:0; margin:0 0 16px; display:flex; gap:24px; flex-wrap:wrap;}
+.nhs-footer li{color:var(--link); text-decoration:underline;}
 </style>
 """
 st.markdown(CSS, unsafe_allow_html=True)
 
-STATUS_TAG = {"MET": ("Met", "t-green"), "NOT_MET": ("Not met", "t-grey"), "UNKNOWN": ("Needs check", "t-warm")}
-
-
-def tag(text, cls):
-    return f'<span class="tag {cls}">{html.escape(str(text))}</span>'
+STATUS = {"MET": ("Met", "tag-green"), "NOT_MET": ("Not met", "tag-grey"), "UNKNOWN": ("Not known", "tag-yellow")}
 
 
 def md(s):
     st.markdown(s, unsafe_allow_html=True)
+
+
+def tag(text, cls):
+    return f'<strong class="nhs-tag {cls}">{html.escape(str(text))}</strong>'
+
+
+def type_tag(c):
+    return tag("Inclusion", "tag-blue") if c["type"] == "inclusion" else tag("Exclusion", "tag-red")
+
+
+def method_tag(c):
+    return tag("Patient record", "tag-purple") if c["kind"] == "structured" else tag("GP notes", "tag-white")
+
+
+def rule_text(c):
+    if c["kind"] != "structured":
+        return ""
+    v = c["value"]
+    field = "BMI" if c["field"] == "bmi" else c["field"].capitalize()
+    return f"{field} {v[0]} to {v[1]}" if c["op"] == "between" else f"{field} {c['op']} {v}"
 
 
 ss = st.session_state
@@ -151,31 +220,37 @@ ss.setdefault("decisions", {})
 trials = data.get_trials()
 stats = data.STATS
 
-# ---------- Sidebar ----------
+# ---------- Sidebar: search form ----------
 with st.sidebar:
-    md('<div style="font-weight:700;font-size:1.15rem;color:#005eb8;margin-top:8px">🧬 TrialMatch</div>'
-       '<div style="color:#4c6272;font-size:.85rem;margin-bottom:12px">Clinical trial recruitment assistant</div>')
-    labels = [f"{t['id']} · {t['title']}" for t in trials]
+    md('<h2 class="nhs-heading-s" style="margin-top:8px">Find patients for a trial</h2>')
+    labels = [f"{t['id']}: {t['title']}" for t in trials]
     trial = trials[labels.index(st.selectbox("Trial", labels))]
-    st.text_input("Or paste an NCT ID", placeholder="NCT0xxxxxxx")
-    st.selectbox("Patient records", ["Demo GP practice · 200 synthetic patients"])
+    st.text_input("Or enter a ClinicalTrials.gov ID", placeholder="For example, NCT01234567")
+    st.selectbox("Patient records", ["Demo GP practice (200 synthetic patients)"])
     go = st.button("Find eligible patients", type="primary", use_container_width=True)
-    st.toggle("Replay cached run", value=True, help="Demo safety net: replays a pre-computed run.")
-    md("<br>")
+    st.toggle("Use saved demo run", value=True, help="Replays a run saved earlier, in case the live run is slow.")
     mem = stats["gpu_mem_gb"] / 128 * 100
-    md(f'<div class="spark"><div class="h">● Running on this DGX Spark</div>'
-       f'<div class="r"><span>Host</span><b>GB10 · 128 GB</b></div>'
-       f'<div class="r"><span>Endpoint</span><code>localhost:8000</code></div>'
-       f'<div class="r"><span>Network egress</span><b>0 bytes</b></div>'
-       f'<div style="margin-top:6px">Unified memory {stats["gpu_mem_gb"]} / 128 GB</div>'
-       f'<div class="mem"><i style="width:{mem:.0f}%"></i></div>'
-       f'<div style="color:#4c6272;font-size:.78rem;margin-top:6px">Patient notes never leave this machine.</div></div>')
+    md('<div class="nhs-card nhs-card--device" style="margin-top:24px">'
+       '<h3 class="nhs-heading-xs">Running on this DGX Spark</h3>'
+       '<table class="nhs-summary device">'
+       '<tr><th>Device</th><td>GB10, 128 GB</td></tr>'
+       '<tr><th>Model server</th><td>On this device</td></tr>'
+       '<tr><th>Data sent out</th><td>0 bytes</td></tr></table>'
+       f'<p class="nhs-body-s" style="margin:0">Memory in use: {stats["gpu_mem_gb"]} GB of 128 GB</p>'
+       f'<div class="meter"><i style="width:{mem:.0f}%"></i></div>'
+       '<p class="nhs-body-s nhs-secondary" style="margin:0">Patient notes never leave this device.</p></div>')
 
-# ---------- Top bar + title ----------
-md('<div class="topbar"><span class="brand">TrialMatch</span><span class="sub">Find patients for clinical trials from GP records</span>'
-   '<span class="pill"><span class="dot"></span>On-device · DGX Spark</span></div>')
-md(f'<div class="crumbs">Trials &rsaquo; {trial["id"]}</div><h1 class="title">{html.escape(trial["title"])}</h1>'
-   f'<div class="meta">{tag(trial["phase"], "t-blue")} {tag("Recruiting", "t-green")} &nbsp;{trial["sponsor"]} · target {trial["target"]} participants</div>')
+# ---------- Header ----------
+md('<header class="nhs-header"><span class="nhs-header__service">TrialMatch</span>'
+   '<span class="nhs-header__org">Clinical trial recruitment</span>'
+   '<span class="nhs-header__status">Running on this device</span></header>'
+   '<nav class="nhs-header__nav"><span>Trials</span><span>Review queue</span><span>How it works</span></nav>')
+
+md(f'<nav class="nhs-breadcrumb"><a href="#">Trials</a><span class="chev">›</span>{trial["id"]}</nav>'
+   f'<div class="nhs-caption-l">{trial["id"]}</div>'
+   f'<h1 class="nhs-heading-l">{html.escape(trial["title"])}</h1>'
+   f'<p class="nhs-body">{tag(trial["phase"], "tag-blue")}{tag("Recruiting", "tag-green")} '
+   f'Sponsor: {trial["sponsor"]}. Aim: {trial["target"]} participants.</p>')
 
 criteria = data.get_criteria(trial["id"])
 run = data.get_run(trial["id"])
@@ -183,169 +258,169 @@ crit_by_id = {c["id"]: c for c in criteria}
 results = run["results"]
 
 if go:
-    with st.status("Agent running on DGX Spark…", expanded=True) as status:
+    with st.status("Checking patients on this device", expanded=True) as status:
         for step in run["trace"]:
-            st.write(f"**{step['step']}. {step['agent']}** · `{step['tool']}`")
+            st.write(f"Step {step['step']} of 5: {step['agent']}")
             time.sleep(0.6)
-        status.update(label=f"Done in {stats['runtime_s']} s · {stats['notes_per_min']:,} notes/min · 0 bytes sent off-device",
-                      state="complete", expanded=False)
+        status.update(label=f"Finished in {stats['runtime_s']} seconds. No data left this device.", state="complete", expanded=False)
     ss.ran = True
 
-# ---------- KPI cards (shown after a run) ----------
+# ---------- Summary cards ----------
 if ss.ran:
     shortlisted = [r for r in results if not r.get("excluded")]
     approved = sum(1 for d in ss.decisions.values() if d == "approved")
     pending = sum(1 for r in shortlisted if r["patient_id"] not in ss.decisions)
-    md('<div class="kpis">'
-       f'<div class="kpi"><div class="l">Screened</div><div class="v">200</div><div class="s">patients · 684 notes</div></div>'
-       f'<div class="kpi"><div class="l">Likely eligible</div><div class="v">12</div><div class="s">6% of practice list</div></div>'
-       f'<div class="kpi"><div class="l">Awaiting review</div><div class="v">{pending}</div><div class="s">recruiter decisions</div></div>'
-       f'<div class="kpi"><div class="l">Approved</div><div class="v">{approved}</div><div class="s">of target {trial["target"]}</div></div>'
-       f'<div class="kpi nv"><div class="l">Sent off-device</div><div class="v">0 B</div><div class="s">{stats["notes_per_min"]:,} notes/min locally</div></div>'
-       '</div>')
+    cards = [("Patients checked", "200", "684 GP notes read"), ("Likely eligible", "12", "6% of patients"),
+             ("To review", str(pending), "Waiting for a decision"), ("Approved", str(approved), f"Aim is {trial['target']}"),
+             ("Data sent out", "0 bytes", f"{stats['notes_per_min']:,} notes a minute")]
+    md('<div class="stats">' + "".join(
+        f'<div class="nhs-card nhs-card--stat{" nhs-card--device" if i == 4 else ""}"><div class="label">{l}</div>'
+        f'<div class="value">{v}</div><div class="hint">{h}</div></div>' for i, (l, v, h) in enumerate(cards)) + '</div>')
 
-tab_crit, tab_trace, tab_list, tab_review = st.tabs(["Criteria", "Agent trace", "Shortlist", "Review queue"])
+tab_crit, tab_trace, tab_list, tab_review = st.tabs(["Criteria", "Agent steps", "Shortlist", "Review queue"])
 
 # ---------- 1. Criteria ----------
 with tab_crit:
-    left, right = st.columns([1, 1.3], gap="large")
+    left, right = st.columns([1, 1.4], gap="large")
     with left:
-        md('<div class="card"><h3>Eligibility text</h3>'
-           f'<div class="inset">{html.escape(trial["eligibility_text"]).replace(chr(10), "<br><br>")}</div>'
-           '<div style="color:#4c6272;font-size:.8rem;margin-top:10px">Source: ClinicalTrials.gov (cached for offline use)</div></div>')
+        md('<h2 class="nhs-heading-m">Eligibility text</h2>'
+           '<div class="nhs-inset">' + "".join(f"<p>{html.escape(p)}</p>" for p in trial["eligibility_text"].split("\n")) + '</div>'
+           '<p class="nhs-body-s nhs-secondary">From ClinicalTrials.gov. Saved on this device so the demo works offline.</p>')
     with right:
-        rows = ""
-        for c in criteria:
-            t = tag("Inclusion", "t-blue") if c["type"] == "inclusion" else tag("Exclusion", "t-red")
-            k = tag("Record check", "t-purple") if c["kind"] == "structured" else tag("Read notes", "t-warm")
-            rule = f' <code>{c["field"]} {c["op"]} {c["value"]}</code>' if c["kind"] == "structured" else ""
-            rows += f'<div class="crow"><div class="cid">{c["id"]}</div><div class="ctext">{html.escape(c["text"])}{rule}<div style="margin-top:6px">{t}{k}</div></div></div>'
-        md(f'<div class="card"><h3>What the criteria agent extracted</h3>{rows}'
-           '<div style="color:#4c6272;font-size:.8rem;margin-top:10px">2 checked against the record with SQL, 6 need the GP notes read by the local model.</div></div>')
+        rows = "".join(
+            f'<tr><td><strong>{c["id"]}</strong></td><td>{html.escape(c["text"])}'
+            f'{"<br><span class=nhs-secondary style=font-size:16px>Rule: " + rule_text(c) + "</span>" if rule_text(c) else ""}</td>'
+            f'<td>{type_tag(c)}</td><td>{method_tag(c)}</td></tr>' for c in criteria)
+        md('<table class="nhs-table"><caption>Criteria found by the agent</caption>'
+           '<thead><tr><th>ID</th><th>Criterion</th><th>Type</th><th>Checked using</th></tr></thead>'
+           f'<tbody>{rows}</tbody></table>'
+           '<p class="nhs-body-s nhs-secondary" style="margin-top:16px">2 criteria are checked against the patient record. '
+           '6 need the GP notes to be read by the model on this device.</p>')
 
-# ---------- 2. Trace ----------
+# ---------- 2. Agent steps ----------
 with tab_trace:
     if not ss.ran:
-        st.info("Press **Find eligible patients** to run the agent. Every step and tool call is shown here.")
+        md('<div class="nhs-inset">Select <strong>Find eligible patients</strong> to start. Each step the agent takes will be shown here.</div>')
     else:
-        c1, c2 = st.columns([1.6, 1], gap="large")
+        c1, c2 = st.columns([1.5, 1], gap="large")
         with c1:
             total = sum(s["ms"] for s in run["trace"])
-            steps = ""
+            items = ""
             for s in run["trace"]:
-                model = tag(s["model"], "t-blue") if s["model"] else tag("No LLM", "t-grey")
-                steps += (f'<div class="step"><div class="node">{s["step"]}</div><div class="hd"><span class="name">{s["agent"]}</span>'
-                          f'<code>{s["tool"]}</code>{model}<span class="ms">{s["ms"]/1000:.2f} s</span></div>'
-                          f'<div class="bar"><i style="width:{max(s["ms"]/total*100, 1.5):.1f}%"></i></div>'
-                          f'<div class="dt">{html.escape(s["detail"])}</div></div>')
-            md(f'<div class="card"><h3>Agent trace · {total/1000:.1f} s total</h3><div class="tl">{steps}</div></div>')
+                model = f'<code>{s["model"]}</code>' if s["model"] else "none (no AI model used)"
+                items += (f'<li><div class="row"><span class="name">{s["step"]}. {s["agent"]}</span>'
+                          f'<span class="time">{s["ms"]/1000:.2f} seconds</span>{tag("Completed", "tag-green")}</div>'
+                          f'<div class="bar"><i style="width:{max(s["ms"]/total*100, 1):.1f}%"></i></div>'
+                          f'<p class="nhs-body" style="margin:0">{html.escape(s["detail"])}</p>'
+                          f'<details class="nhs-details"><summary>Show technical details</summary><div class="nhs-details__text">'
+                          f'Tool: <code>{s["tool"]}</code><br>Model: {model}</div></details></li>')
+            md(f'<h2 class="nhs-heading-m">Agent steps</h2><p class="nhs-body nhs-secondary">All 5 steps finished in {total/1000:.1f} seconds.</p>'
+               f'<ol class="nhs-task-list">{items}</ol>')
         with c2:
             top = run["funnel"][0][1]
-            fr = "".join(f'<div class="fr"><div class="fl"><span>{l}</span><b>{n}</b></div><div class="fb"><i style="width:{max(n/top*100, 3):.0f}%"></i></div></div>'
-                         for l, n in run["funnel"])
-            md(f'<div class="card"><h3>Patient funnel</h3>{fr}'
-               '<div style="color:#4c6272;font-size:.8rem;margin-top:10px">Cheap structured checks run first. Only remaining patients have their notes read.</div></div>')
-            md('<div class="card"><h3>Models on this device</h3>'
-               '<div class="summ"><div class="k">Criteria</div><div>Llama-3.3-70B FP8</div>'
-               '<div class="k">Notes judge</div><div>Nemotron Nano 9B v2</div>'
-               '<div class="k">Embeddings</div><div>bge-small</div>'
-               '<div class="k">Serving</div><div>vLLM · localhost:8000</div></div></div>')
+            fr = "".join(f'<div class="fr"><div class="fl"><span>{l}</span><strong>{n}</strong></div>'
+                         f'<div class="fb"><i style="width:{max(n/top*100, 2):.0f}%"></i></div></div>' for l, n in run["funnel"])
+            md(f'<div class="nhs-card"><h2 class="nhs-heading-s">How patients were narrowed down</h2><div class="funnel">{fr}</div>'
+               '<p class="nhs-body-s nhs-secondary" style="margin:0">Quick record checks run first, so only the remaining patients have their notes read.</p></div>')
+            md('<div class="nhs-card nhs-card--device"><h2 class="nhs-heading-s">Models on this device</h2><table class="nhs-summary" style="margin:0">'
+               '<tr><th>Reading criteria</th><td>Llama 3.3 70B</td></tr><tr><th>Reading notes</th><td>Nemotron Nano 9B</td></tr>'
+               '<tr><th>Finding passages</th><td>bge-small</td></tr><tr><th>Server</th><td>vLLM, local only</td></tr></table></div>')
 
 # ---------- 3. Shortlist ----------
 with tab_list:
     if not ss.ran:
-        st.info("Run the agent to build a shortlist.")
+        md('<div class="nhs-inset">Find eligible patients first. The shortlist will appear here.</div>')
     else:
-        show_excl = st.toggle("Show excluded patients", value=False)
-        head = "".join(f"<th title='{html.escape(c['text'])}'>{c['id']}</th>" for c in criteria)
+        show_excl = st.toggle("Show patients the agent excluded", value=False)
         body = ""
         for r in results:
             if r.get("excluded") and not show_excl:
                 continue
-            initials = "".join(w[0] for w in r["name"].replace(".", "").split())[:2]
-            dots = ""
+            marks = ""
             for c in criteria:
                 s = r["criteria"][c["id"]]["status"]
-                cls = "EXCL" if (c["type"] == "exclusion" and s == "MET") else s
-                sym = {"MET": "✓", "NOT_MET": "–", "UNKNOWN": "?", "EXCL": "✕"}[cls]
-                dots += f'<span class="d-{cls}" title="{c["id"]}: {s}">{sym}</span>'
+                cls, sym = ("m-exc", "✕") if (c["type"] == "exclusion" and s == "MET") else \
+                    {"MET": ("m-met", "✓"), "NOT_MET": ("m-not", "–"), "UNKNOWN": ("m-unk", "?")}[s]
+                marks += f'<span class="{cls}" title="{c["id"]}: {STATUS[s][0]}">{sym}</span>'
             d = ss.decisions.get(r["patient_id"])
-            dec = (tag("Excluded", "t-red") if r.get("excluded") else
-                   tag("Approved", "t-green") if d == "approved" else
-                   tag("Rejected", "t-red") if d == "rejected" else tag("To review", "t-blue"))
-            body += (f'<tr class="{"ex" if r.get("excluded") else ""}"><td><span class="av">{initials}</span>'
-                     f'<span class="pname">{r["name"]}</span><div class="pid" style="margin-left:44px;margin-top:-8px">{r["patient_id"]} · {r["age"]}{r["sex"]} · BMI {r["bmi"]}</div></td>'
-                     f'<td><div class="score"><b>{r["score"]:.2f}</b><div class="tr"><i style="width:{r["score"]*100:.0f}%"></i></div></div></td>'
-                     f'<td class="dots" style="white-space:nowrap">{dots}</td><td style="max-width:360px">{html.escape(r["explanation"])}</td><td>{dec}</td></tr>')
-        md(f'<div class="card" style="padding:6px 8px"><table class="sl"><thead><tr><th>Patient</th><th>Match</th>'
-           f'<th>Criteria C1–C8</th><th>Why</th><th>Status</th></tr></thead><tbody>{body}</tbody></table></div>')
-        md('<div style="color:#4c6272;font-size:.82rem">'
-           '<span class="dots"><span class="d-MET">✓</span></span> met &nbsp; '
-           '<span class="dots"><span class="d-NOT_MET">–</span></span> not met (for exclusions, that is good) &nbsp; '
-           '<span class="dots"><span class="d-UNKNOWN">?</span></span> no evidence, needs a human check &nbsp; '
-           '<span class="dots"><span class="d-EXCL">✕</span></span> exclusion found. '
-           'Decision support only: a recruiter confirms every match.</div>')
+            dec = (tag("Excluded", "tag-red") if r.get("excluded") else tag("Approved", "tag-green") if d == "approved"
+                   else tag("Rejected", "tag-red") if d == "rejected" else tag("To review", "tag-blue"))
+            body += (f'<tr class="{"excluded" if r.get("excluded") else ""}"><td><strong>{r["name"]}</strong><br>'
+                     f'<span class="nhs-secondary" style="font-size:16px">{r["patient_id"]}, age {r["age"]}, BMI {r["bmi"]}</span></td>'
+                     f'<td class="num">{r["score"]*100:.0f}%</td><td class="marks" style="white-space:nowrap">{marks}</td>'
+                     f'<td style="font-size:16px;line-height:24px">{html.escape(r["explanation"])}</td><td>{dec}</td></tr>')
+        n = sum(1 for r in results if not r.get("excluded"))
+        md('<div class="nhs-card" style="padding:24px 32px"><table class="nhs-table">'
+           f'<caption>{n} patients likely to be eligible</caption>'
+           '<thead><tr><th>Patient</th><th class="num">Match</th><th>Criteria 1 to 8</th><th>Reason</th><th>Status</th></tr></thead>'
+           f'<tbody>{body}</tbody></table></div>')
+        md('<p class="nhs-body-s"><span class="marks"><span class="m-met">✓</span></span> met &nbsp; '
+           '<span class="marks"><span class="m-not">–</span></span> not met (for an exclusion, this is good) &nbsp; '
+           '<span class="marks"><span class="m-unk">?</span></span> not known, needs checking &nbsp; '
+           '<span class="marks"><span class="m-exc">✕</span></span> exclusion found</p>'
+           '<div class="nhs-inset">TrialMatch helps recruiters find patients. A recruiter must check and approve every patient before anyone is contacted.</div>')
 
-# ---------- 4. Review queue (master-detail) ----------
+# ---------- 4. Review queue ----------
 with tab_review:
     if not ss.ran:
-        st.info("Run the agent, then work through the review queue here.")
+        md('<div class="nhs-inset">Find eligible patients first, then review them one at a time here.</div>')
     else:
         queue = results[:4]
         qcol, dcol = st.columns([1, 2.6], gap="large")
         with qcol:
-            md('<div class="qhead">Review queue</div>')
-
-            def qlabel(r):
+            def qlabel(i):
+                r = queue[i]
                 d = ss.decisions.get(r["patient_id"])
-                mark = "⛔" if r.get("excluded") else "✅" if d == "approved" else "❌" if d == "rejected" else "●"
-                return f'{mark}  {r["name"]} · {r["score"]:.2f}'
-
-            idx = st.radio("queue", range(len(queue)), format_func=lambda i: qlabel(queue[i]), label_visibility="collapsed")
+                state = "excluded" if r.get("excluded") else "approved" if d == "approved" else "rejected" if d == "rejected" else "to review"
+                return f'{r["name"]} ({state})'
+            idx = st.radio("Choose a patient to review", range(len(queue)), format_func=qlabel)
             r = queue[idx]
         with dcol:
-            a, b = st.columns([1.7, 1], gap="medium")
+            md(f'<span class="nhs-caption-l" style="margin:0">{r["patient_id"]}</span><h2 class="nhs-heading-l">{r["name"]}</h2>')
+            if r.get("excluded"):
+                md('<div class="nhs-error-summary" role="alert"><h2>The agent excluded this patient</h2>'
+                   f'<p>{html.escape(r["explanation"])}</p></div>')
+            a, b = st.columns([1.6, 1], gap="large")
             with a:
-                md(f'<h1 class="title" style="font-size:1.5rem">{r["name"]} <span style="color:#4c6272;font-weight:400;font-size:1rem">{r["patient_id"]}</span></h1>')
-                md('<div class="summ">'
-                   f'<div class="k">Age, sex</div><div>{r["age"]}, {r["sex"]}</div>'
-                   f'<div class="k">BMI</div><div>{r["bmi"]}</div>'
-                   f'<div class="k">Match score</div><div>{r["score"]:.2f}</div>'
-                   f'<div class="k">Summary</div><div>{html.escape(r["explanation"])}</div></div>')
+                md('<table class="nhs-summary">'
+                   f'<tr><th>Age</th><td>{r["age"]}</td></tr>'
+                   f'<tr><th>Sex</th><td>{"Female" if r["sex"] == "F" else "Male"}</td></tr>'
+                   f'<tr><th>Body mass index (BMI)</th><td>{r["bmi"]}</td></tr>'
+                   f'<tr><th>Match</th><td>{r["score"]*100:.0f}%</td></tr>'
+                   f'<tr><th>Reason</th><td>{html.escape(r["explanation"])}</td></tr></table>')
             with b:
                 d = ss.decisions.get(r["patient_id"])
-                if r.get("excluded"):
-                    md('<div class="decision no">Excluded by agent</div>')
-                elif d == "approved":
-                    md('<div class="decision ok">✓ Approved for contact</div>')
-                elif d == "rejected":
-                    md('<div class="decision no">✕ Rejected</div>')
-                else:
-                    md('<div class="decision">Awaiting your decision</div>')
+                state = (tag("Excluded", "tag-red") if r.get("excluded") else tag("Approved for contact", "tag-green") if d == "approved"
+                         else tag("Rejected", "tag-red") if d == "rejected" else tag("Waiting for a decision", "tag-blue"))
+                md(f'<h3 class="nhs-heading-xs">Your decision</h3><p class="nhs-body">{state}</p>')
                 if st.button("Approve for contact", key=f"ap_{r['patient_id']}", type="primary", use_container_width=True):
                     ss.decisions[r["patient_id"]] = "approved"; st.rerun()
                 if st.button("Reject", key=f"rj_{r['patient_id']}", use_container_width=True):
                     ss.decisions[r["patient_id"]] = "rejected"; st.rerun()
-                st.text_input("Note for the audit log", key=f"why_{r['patient_id']}", placeholder="e.g. confirm ECOG on call")
+                st.text_input("Note (optional)", key=f"why_{r['patient_id']}", help="Saved to the audit log with your decision.")
 
-            md('<h3 style="font-size:1.1rem;margin:22px 0 10px">Evidence for each criterion</h3>')
+            md('<h2 class="nhs-heading-m" style="margin-top:16px">Evidence for each criterion</h2>')
             for cid, ev in r["criteria"].items():
                 c = crit_by_id[cid]
                 s = ev["status"]
                 bad = c["type"] == "exclusion" and s == "MET"
-                t = tag("Inclusion", "t-blue") if c["type"] == "inclusion" else tag("Exclusion", "t-red")
-                st_tag = tag("Excludes patient", "t-red") if bad else tag(*STATUS_TAG[s])
+                result = tag("Excludes this patient", "tag-red") if bad else tag(*STATUS[s])
                 body = ""
                 if ev.get("note") and ev.get("quote"):
                     q = html.escape(ev["quote"])
                     note = html.escape(ev["note"]).replace(q, f"<mark>{q}</mark>")
-                    body = f'<div class="src">📄 {ev["source"]} · quoted verbatim</div><div class="inset">{note}</div>'
+                    body = (f'<p class="nhs-body-s nhs-secondary" style="margin:8px 0 0">{ev["source"]}. The highlighted words are quoted exactly.</p>'
+                            f'<div class="nhs-inset" style="margin-bottom:0">{note}</div>')
                 elif ev.get("source"):
-                    body = f'<div class="src">🗂 {html.escape(ev["source"])}</div>'
+                    body = f'<p class="nhs-body-s nhs-secondary" style="margin:8px 0 0">{html.escape(ev["source"])}</p>'
                 if s == "UNKNOWN":
-                    body += '<div class="warn"><b>Important:</b> no verbatim evidence in the notes. Ask the patient or check hospital letters before enrolling.</div>'
-                md(f'<div class="ev {"bad" if bad else ""}"><div class="row1"><span class="cid">{cid}</span>'
-                   f'<span class="ct">{html.escape(c["text"])}</span>{t}{st_tag}<span class="conf">conf. {ev["confidence"]:.2f}</span></div>{body}</div>')
+                    body += ('<div class="nhs-warning"><span class="nhs-warning__label">Important</span>'
+                             '<p>The notes do not mention this. Ask the patient or check hospital letters before they join the trial.</p></div>')
+                border = "border-left:4px solid var(--error);" if bad else ""
+                md(f'<div class="nhs-card" style="padding:24px;margin-bottom:16px;{border}">'
+                   f'<h3 class="nhs-heading-xs">{cid}: {html.escape(c["text"])}</h3>'
+                   f'<div>{type_tag(c)}{result}<span class="nhs-body-s nhs-secondary">Confidence {ev["confidence"]*100:.0f}%</span></div>{body}</div>')
 
-md(f'<div class="foot">Models: {stats["model"]} on {stats["host"]} · <b>0 bytes sent off-device</b> · '
-   f'{stats["notes_per_min"]:,} notes/min · Synthetic data only. TrialMatch is decision support for recruiters, not an eligibility decision.</div>')
+md('<footer class="nhs-footer"><ul><li>How TrialMatch works</li><li>Data and privacy</li><li>Accessibility</li></ul>'
+   f'<p style="margin:0">Models run on {stats["host"]}. No patient data leaves this device. All patient data shown is synthetic. '
+   'TrialMatch supports recruiters. It does not decide who is eligible.</p></footer>')

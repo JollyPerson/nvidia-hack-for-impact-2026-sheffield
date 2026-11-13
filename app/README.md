@@ -11,11 +11,20 @@ are the seam for the real pipeline: return the same shapes and the UI keeps work
 Screens (tabs): parsed criteria, live agent trace + funnel, ranked shortlist, recruiter review with
 quoted note evidence and approve/reject. Sidebar shows the "running locally on DGX Spark" panel.
 
-## Design references
+## Design system
 
-- NHS design system (service-manual.nhs.uk): colour palette, tags, inset text for note quotes, summary list,
-  warning callout for unknowns, green primary buttons, yellow focus state. No NHS logo, no endorsement implied.
-- Dribbble healthcare dashboards: KPI stat cards over a light grey canvas, white cards, patient table with initials avatars.
-- Dribbble AI agent workflow shots: vertical numbered step timeline with per-step tool and timing.
-- Dribbble approval queue shots: master-detail review (queue on the left, decision panel on the right).
-- Mobbin "clean dashboards" (public homepage only): one accent colour, sparse layout.
+The UI follows the NHS design system (service-manual.nhs.uk/design-system):
+
+- Colour: only NHS palette values, used in their roles (text #212b32, secondary #4c6272, links #005eb8 with
+  hover/visited/active states, yellow #ffeb3b focus with a dark underline, green #007f3b buttons, #d8dde0 borders,
+  #f0f4f5 page background, #d5281b errors). The "runs on this device" signal uses the aqua-green family.
+- Type: Frutiger with Arial fallback, 19px body, heading sizes 36/26/22/19, secondary text in grey-1.
+- Spacing: the NHS scale (4, 8, 16, 24, 32, 48).
+- Components: header with service name (no NHS logo), breadcrumbs, caption + heading, tags, cards and feature
+  cards, table with caption, summary list, inset text for note quotes, warning callout for unknowns, error summary
+  for exclusions, details for technical info, task list for agent steps, tabs, buttons, footer.
+- Content: plain English, sentence case, no unexplained abbreviations in UI text, dates as "2 October 2026".
+
+No NHS logo is used and no NHS endorsement is implied.
+
+Layout patterns also borrowed from Dribbble (summary cards, step timeline, queue with detail panel).

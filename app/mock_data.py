@@ -54,15 +54,15 @@ CRITERIA = {
 
 TRACE = [
     {"step": 1, "agent": "Criteria agent", "tool": "llm.parse_criteria", "model": "Llama-3.3-70B (FP8)", "ms": 4210,
-     "detail": "Parsed eligibility text into 8 criteria: 2 structured, 6 free text (3 inclusion, 3 exclusion)."},
+     "detail": "Found 8 criteria in the eligibility text. 2 can be checked against the patient record. 6 need the GP notes to be read."},
     {"step": 2, "agent": "Structured filter", "tool": "pandas.query", "model": None, "ms": 38,
-     "detail": "age >= 18 removed 41. bmi between 18.5 and 35 removed 22. 200 -> 137 candidates."},
+     "detail": "Age under 18 ruled out 41 patients. BMI outside 18.5 to 35 ruled out 22 more. 137 patients remain."},
     {"step": 3, "agent": "Evidence retriever", "tool": "embed.search(top_k=3)", "model": "bge-small", "ms": 1870,
-     "detail": "Embedded 684 GP notes. Retrieved 2,466 snippets (137 patients x 6 criteria x 3)."},
+     "detail": "Indexed 684 GP notes. Found the 3 most relevant passages for each patient and criterion (2,466 passages)."},
     {"step": 4, "agent": "Notes judge", "tool": "llm.judge (async x32)", "model": "Nemotron Nano 9B v2", "ms": 21450,
-     "detail": "822 judgements. MET 214, NOT_MET 497, UNKNOWN 111. 3 answers without a verbatim quote downgraded to UNKNOWN."},
+     "detail": "Made 822 decisions: 214 met, 497 not met, 111 unknown. 3 answers without an exact quote from a note were changed to unknown."},
     {"step": 5, "agent": "Ranker", "tool": "rank.score", "model": None, "ms": 12,
-     "detail": "Excluded 96 with an exclusion criterion MET. 41 remaining, 12 likely eligible shortlisted."},
+     "detail": "Ruled out 96 patients with an exclusion in their notes. 12 of the remaining 41 are likely eligible."},
 ]
 
 FUNNEL = [
@@ -84,10 +84,10 @@ STATS = {
 
 # Status per criterion: MET / NOT_MET / UNKNOWN. Structured criteria cite the record field, free text cites a note.
 def _s(field, value):
-    return {"status": "MET", "source": f"Record: {field} = {value}", "quote": None, "note": None, "confidence": 1.0}
+    return {"status": "MET", "source": f"Patient record: {field.upper() if field == 'bmi' else field} {value}", "quote": None, "note": None, "confidence": 1.0}
 
 def _n(status, quote, note_id, date, note, conf):
-    return {"status": status, "source": f"GP note {note_id} ({date})", "quote": quote, "note": note, "confidence": conf}
+    return {"status": status, "source": f"GP note {note_id}, {date}", "quote": quote, "note": note, "confidence": conf}
 
 RESULTS = [
     {
@@ -95,17 +95,17 @@ RESULTS = [
         "explanation": "Stage IB adenocarcinoma, ECOG 0, seen 3 weeks ago, no autoimmune or prior treatment history.",
         "criteria": {
             "C1": _s("age", 67), "C2": _s("bmi", 26.1),
-            "C3": _n("MET", "Biopsy confirms adenocarcinoma of R upper lobe, staged T2aN0M0 (stage IB)", "N-0142-04", "02 Oct 2026",
+            "C3": _n("MET", "Biopsy confirms adenocarcinoma of R upper lobe, staged T2aN0M0 (stage IB)", "N-0142-04", "2 October 2026",
                      "Results review. Biopsy confirms adenocarcinoma of R upper lobe, staged T2aN0M0 (stage IB). Discussed MDT outcome, surgical referral made. Pt understands, daughter present.", 0.94),
-            "C4": _n("MET", "fully active, walks dog 2 miles daily, ECOG 0", "N-0142-05", "21 Oct 2026",
+            "C4": _n("MET", "fully active, walks dog 2 miles daily, ECOG 0", "N-0142-05", "21 October 2026",
                      "F/U post MDT. Feels well in herself. Remains fully active, walks dog 2 miles daily, ECOG 0. Mild cough, no haemoptysis. Wt stable.", 0.91),
-            "C5": _n("MET", "F/U post MDT", "N-0142-05", "21 Oct 2026",
+            "C5": _n("MET", "F/U post MDT", "N-0142-05", "21 October 2026",
                      "F/U post MDT. Feels well in herself. Remains fully active, walks dog 2 miles daily, ECOG 0. Mild cough, no haemoptysis. Wt stable.", 0.99),
-            "C6": _n("NOT_MET", "No hx of thyroid or other autoimmune disease", "N-0142-01", "14 Mar 2025",
+            "C6": _n("NOT_MET", "No hx of thyroid or other autoimmune disease", "N-0142-01", "14 March 2025",
                      "New pt check. Ex-smoker 30 pack-yrs, quit 2019. HTN on amlodipine. No hx of thyroid or other autoimmune disease. FHx: father lung ca.", 0.88),
-            "C7": _n("NOT_MET", "treatment naive, surgical referral made", "N-0142-04", "02 Oct 2026",
+            "C7": _n("NOT_MET", "treatment naive, surgical referral made", "N-0142-04", "2 October 2026",
                      "Results review. Biopsy confirms adenocarcinoma, stage IB. Pt treatment naive, surgical referral made.", 0.85),
-            "C8": _n("NOT_MET", "post-menopausal since 2008", "N-0142-01", "14 Mar 2025",
+            "C8": _n("NOT_MET", "post-menopausal since 2008", "N-0142-01", "14 March 2025",
                      "New pt check. Post-menopausal since 2008. Ex-smoker 30 pack-yrs, quit 2019.", 0.97),
         },
     },
@@ -114,13 +114,13 @@ RESULTS = [
         "explanation": "Stage IIA squamous NSCLC, ECOG 1, seen last month. Autoimmune history not mentioned anywhere.",
         "criteria": {
             "C1": _s("age", 59), "C2": _s("bmi", 29.4),
-            "C3": _n("MET", "letter from resp team: squamous cell ca L lower lobe, stage IIA", "N-0077-03", "18 Sep 2026",
+            "C3": _n("MET", "squamous cell ca L lower lobe, stage IIA", "N-0077-03", "18 September 2026",
                      "Letter from resp team: squamous cell ca L lower lobe, stage IIA. Awaiting oncology clinic. Pt anxious, offered Macmillan contact.", 0.92),
-            "C4": _n("MET", "SOB on hills only, independent with ADLs, still working part time", "N-0077-04", "08 Oct 2026",
+            "C4": _n("MET", "SOB on hills only, independent with ADLs, still working part time", "N-0077-04", "8 October 2026",
                      "Review. SOB on hills only, independent with ADLs, still working part time. Sats 95% RA.", 0.74),
-            "C5": _n("MET", "Review.", "N-0077-04", "08 Oct 2026", "Review. SOB on hills only, independent with ADLs.", 0.99),
+            "C5": _n("MET", "Review.", "N-0077-04", "8 October 2026", "Review. SOB on hills only, independent with ADLs.", 0.99),
             "C6": _n("UNKNOWN", None, None, None, None, 0.41),
-            "C7": _n("NOT_MET", "no prior oncological treatment", "N-0077-03", "18 Sep 2026",
+            "C7": _n("NOT_MET", "no prior oncological treatment", "N-0077-03", "18 September 2026",
                      "Letter from resp team: squamous cell ca, stage IIA. No prior oncological treatment. Awaiting oncology clinic.", 0.83),
             "C8": _n("NOT_MET", "Not applicable (male)", "Record", "-", None, 1.0),
         },
@@ -130,13 +130,13 @@ RESULTS = [
         "explanation": "Stage IIIA adenocarcinoma, ECOG 1. Pregnancy plans are not discussed, check before contacting.",
         "criteria": {
             "C1": _s("age", 52), "C2": _s("bmi", 22.8),
-            "C3": _n("MET", "EGFR-neg adenocarcinoma, stage IIIA per oncology letter", "N-0019-02", "30 Aug 2026",
+            "C3": _n("MET", "EGFR-neg adenocarcinoma, stage IIIA per oncology letter", "N-0019-02", "30 August 2026",
                      "Onc letter scanned. EGFR-neg adenocarcinoma, stage IIIA per oncology letter. Plan for neoadjuvant discussion.", 0.9),
-            "C4": _n("MET", "tires by afternoon but self-caring, ECOG 1", "N-0019-03", "12 Sep 2026",
+            "C4": _n("MET", "tires by afternoon but self-caring, ECOG 1", "N-0019-03", "12 September 2026",
                      "Telephone consult. Tires by afternoon but self-caring, ECOG 1. Appetite ok.", 0.89),
-            "C5": _n("MET", "Telephone consult.", "N-0019-03", "12 Sep 2026", "Telephone consult. Tires by afternoon but self-caring.", 0.98),
-            "C6": _n("NOT_MET", "no autoimmune hx", "N-0019-01", "05 Jan 2026", "Annual review. Asthma, well controlled on salbutamol prn. No autoimmune hx.", 0.86),
-            "C7": _n("NOT_MET", "Plan for neoadjuvant discussion", "N-0019-02", "30 Aug 2026", "Onc letter scanned. Plan for neoadjuvant discussion.", 0.7),
+            "C5": _n("MET", "Telephone consult.", "N-0019-03", "12 September 2026", "Telephone consult. Tires by afternoon but self-caring.", 0.98),
+            "C6": _n("NOT_MET", "no autoimmune hx", "N-0019-01", "5 January 2026", "Annual review. Asthma, well controlled on salbutamol prn. No autoimmune hx.", 0.86),
+            "C7": _n("NOT_MET", "Plan for neoadjuvant discussion", "N-0019-02", "30 August 2026", "Onc letter scanned. Plan for neoadjuvant discussion.", 0.7),
             "C8": _n("UNKNOWN", None, None, None, None, 0.38),
         },
     },
@@ -146,12 +146,12 @@ RESULTS = [
         "excluded": True,
         "criteria": {
             "C1": _s("age", 71), "C2": _s("bmi", 24.0),
-            "C3": _n("MET", "stage IB NSCLC confirmed at MDT", "N-0163-05", "11 Oct 2026", "Stage IB NSCLC confirmed at MDT. For lobectomy.", 0.93),
-            "C4": _n("MET", "ECOG 0", "N-0163-05", "11 Oct 2026", "Stage IB NSCLC confirmed at MDT. ECOG 0. For lobectomy.", 0.95),
-            "C5": _n("MET", "For lobectomy.", "N-0163-05", "11 Oct 2026", "Stage IB NSCLC confirmed at MDT. For lobectomy.", 0.99),
-            "C6": _n("MET", "Hashimoto's thyroiditis flare, started pred 30mg reducing course", "N-0163-02", "19 Jun 2025",
+            "C3": _n("MET", "stage IB NSCLC confirmed at MDT", "N-0163-05", "11 October 2026", "Stage IB NSCLC confirmed at MDT. For lobectomy.", 0.93),
+            "C4": _n("MET", "ECOG 0", "N-0163-05", "11 October 2026", "Stage IB NSCLC confirmed at MDT. ECOG 0. For lobectomy.", 0.95),
+            "C5": _n("MET", "For lobectomy.", "N-0163-05", "11 October 2026", "Stage IB NSCLC confirmed at MDT. For lobectomy.", 0.99),
+            "C6": _n("MET", "Hashimoto's thyroiditis flare, started pred 30mg reducing course", "N-0163-02", "19 June 2025",
                      "Seen with fatigue, goitre. TFTs deranged. Hashimoto's thyroiditis flare, started pred 30mg reducing course alongside levothyroxine.", 0.93),
-            "C7": _n("NOT_MET", "treatment naive", "N-0163-05", "11 Oct 2026", "Stage IB NSCLC confirmed at MDT. Treatment naive.", 0.8),
+            "C7": _n("NOT_MET", "treatment naive", "N-0163-05", "11 October 2026", "Stage IB NSCLC confirmed at MDT. Treatment naive.", 0.8),
             "C8": _n("NOT_MET", "Not applicable (male)", "Record", "-", None, 1.0),
         },
     },
