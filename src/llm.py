@@ -101,6 +101,10 @@ def fit_to_budget(messages: list[dict], tools: list[dict] | None = None, role: s
     return msgs
 
 
+# Marks a verdict whose model said it found nothing relevant (basis = nothing_found).
+NOTHING_FOUND = "[nothing found]"
+
+
 def parse_verdict(text: str | None) -> Verdict:
     """Parse model text into a Verdict. Raises ValueError / ValidationError.
 
@@ -124,6 +128,8 @@ def parse_verdict(text: str | None) -> Verdict:
             + str(data.get("reasoning", ""))
         )
         data["verdict"] = VerdictValue.insufficient.value
+    if basis == "nothing_found":
+        data["reasoning"] = NOTHING_FOUND + " " + str(data.get("reasoning", ""))
     return Verdict.model_validate(data)
 
 

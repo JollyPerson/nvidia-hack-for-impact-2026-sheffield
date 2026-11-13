@@ -87,3 +87,36 @@ def test_decide_never_removes_verdicts_or_flags():
     before = result(c2=("met", "not_met"), flags2=[DISAGREE])
     after = decide(STUDY, before.model_copy(deep=True))
     assert after.assessments == before.assessments
+
+
+from src.screening import ALL_NOTES_READ  # noqa: E402
+
+
+def silent(reason=ALL_NOTES_READ + " [nothing found] no mention"):
+    return Verdict(verdict="insufficient", reasoning=reason, citations=[])
+
+
+def test_exclusion_never_mentioned_after_reading_all_notes_is_not_blocking():
+    r = result()
+    r.assessments[2] = CriterionAssessment(criterion_id="C3", stage1=silent(), stage2=silent())
+    r = decide(STUDY, r)
+    assert r.status == FinalStatus.likely_eligible
+    assert any(x.startswith("Not mentioned in the notes") and "COPD" in x for x in r.reasons)
+
+
+@pytest.mark.parametrize("stage1,stage2,flags", [
+    (silent(), None, []),  # only one model looked
+    (silent(), silent("[nothing found] notes were cut"), []),  # verifier did not see every note
+    (silent(), silent("model server error: APIConnectionError"), []),
+    (silent(), silent(), [DISAGREE]),
+])
+def test_silence_counts_only_when_both_models_read_every_note(stage1, stage2, flags):
+    r = result()
+    r.assessments[2] = CriterionAssessment(criterion_id="C3", stage1=stage1, stage2=stage2, flags=flags)
+    assert decide(STUDY, r).status == FinalStatus.needs_review
+
+
+def test_silence_never_satisfies_an_inclusion():
+    r = result()
+    r.assessments[1] = CriterionAssessment(criterion_id="C2", stage1=silent(), stage2=silent())
+    assert decide(STUDY, r).status == FinalStatus.needs_review

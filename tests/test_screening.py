@@ -353,3 +353,21 @@ def test_notes_in_prompt_respect_the_limit(conn, monkeypatch):
     screen_criterion(LLM(fake), PatientTools(conn, "P002"), STUDY.criteria[1], "screener")
     user = next(m["content"] for m in fake.requests[0]["messages"] if m["role"] == "user")
     assert "Clinical notes for this patient" not in user
+
+
+NOTHING = json.dumps({"verdict": "insufficient", "reasoning": "no mention", "citations": [], "basis": "nothing_found"})
+
+
+def test_nothing_found_after_all_notes_is_marked(conn):
+    from src.screening import ALL_NOTES_READ
+    fake = ScriptedClient([response(content="done"), response(content=NOTHING)])
+    v = screen_criterion(LLM(fake), PatientTools(conn, "P005"), STUDY.criteria[1], "screener")
+    assert v.verdict == VerdictValue.insufficient and v.reasoning.startswith(ALL_NOTES_READ)
+
+
+def test_nothing_found_without_all_notes_is_not_marked(conn, monkeypatch):
+    from src.screening import ALL_NOTES_READ
+    monkeypatch.setattr(config, "NOTES_IN_PROMPT_CHARS", 0)
+    fake = ScriptedClient([response(content="done"), response(content=NOTHING)])
+    v = screen_criterion(LLM(fake), PatientTools(conn, "P005"), STUDY.criteria[1], "screener")
+    assert not v.reasoning.startswith(ALL_NOTES_READ)

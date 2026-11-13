@@ -28,7 +28,7 @@ from datetime import date
 import openai
 
 import config
-from src.llm import LLM, PromptTooLong, max_output_tokens
+from src.llm import LLM, NOTHING_FOUND, PromptTooLong, max_output_tokens
 from src.models import (
     Citation,
     Criterion,
@@ -103,6 +103,11 @@ NOTES_SHOWN = (
 NOTES_NOT_SHOWN = "The patient's clinical notes are not shown: find them with search_notes."
 
 
+# Marks an `insufficient` verdict reached after the model was shown EVERY note of the patient and said it
+# found nothing relevant. decide.py may then treat an exclusion as not mentioned (rather than unknown).
+ALL_NOTES_READ = "[code: all notes read, nothing found]"
+
+
 def _notes_block(tools: PatientTools, role: str) -> tuple[str, str]:
     """The patient's notes, newest first and whole, within the prompt budget. Returns (block, system note).
 
@@ -166,6 +171,7 @@ def screen_criterion(
     """Run the tool loop + verdict for one criterion and one patient. Always returns a Verdict."""
     summary = tools.patient_summary()
     notes, notes_note = _notes_block(tools, role)
+    all_notes_shown = notes_note.startswith(NOTES_SHOWN[:40]) and "older notes not shown" not in notes_note
     system = SYSTEM_PROMPT.format(
         today=_today(),
         sex=summary.get("Sex", "unknown"),
@@ -199,6 +205,9 @@ def screen_criterion(
             {"role": "user", "content": VERDICT_INSTRUCTIONS.format(type_rule=TYPE_RULES[criterion.type])}
         )
         verdict = enforce_negative_evidence(llm.verdict(role, messages))
+        if (all_notes_shown and verdict.verdict == VerdictValue.insufficient and not verdict.citations
+                and NOTHING_FOUND in verdict.reasoning):
+            verdict = verdict.model_copy(update={"reasoning": f"{ALL_NOTES_READ} {verdict.reasoning}"})
     except PromptTooLong as e:
         verdict = Verdict(verdict=VerdictValue.insufficient, reasoning=f"prompt too long: {e}")
     except openai.OpenAIError as e:
