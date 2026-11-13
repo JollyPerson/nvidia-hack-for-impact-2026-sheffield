@@ -83,6 +83,17 @@ def _code_assessments(study: Study, citations: dict) -> list[CriterionAssessment
     ]
 
 
+def _most_recent_first(conn: sqlite3.Connection, candidates: list) -> list:
+    """Candidates ordered by the arrival time of their matching episode, newest first (ties by patient id)."""
+    ids = [c.encounter_id for c in candidates]
+    marks = ",".join("?" * len(ids))
+    arrived = dict(conn.execute(
+        f"SELECT EncounterID, AdmissionDateTime FROM Inpatients WHERE EncounterID IN ({marks}) "
+        f"UNION ALL SELECT EncounterID, CheckInDateTime FROM ECDS WHERE EncounterID IN ({marks})", ids + ids
+    ).fetchall())
+    return sorted(candidates, key=lambda c: (arrived.get(c.encounter_id) or "", c.patient_id), reverse=True)
+
+
 def _screen_all(llm, conn, study, patient_ids, workers, audit, emit, n_notes) -> list[PatientResult]:
     """screen_patient for every candidate, `workers` at a time. Results keep the candidates' order.
 
@@ -156,8 +167,8 @@ def run_screening(
         detail = (f"{len(candidates)} of {pre.patients_considered} patients in the warehouse passed "
                   f"{sum(c.kind == 'structured' for c in study.criteria)} structured criteria.")
         if max_candidates is not None and len(candidates) > max_candidates:
-            detail += f" Screening the first {max_candidates} (demo limit)."
-            candidates = candidates[:max_candidates]
+            detail += f" Screening the {max_candidates} most recently admitted (demo limit)."
+            candidates = _most_recent_first(conn, candidates)[:max_candidates]
         run.candidates_after_sql = len(candidates)
         emit(_step(1, "done", detail, time.perf_counter() - t))
 

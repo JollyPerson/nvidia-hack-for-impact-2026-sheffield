@@ -27,6 +27,8 @@ def test_five_patients_through_the_pipeline():
 def test_max_candidates_limits_the_run():
     run = run_screening(STUDY, LLM(RuleBasedClient()), build_db(), max_candidates=2)
     assert run.candidates_after_sql == 2 and len(run.patients) == 2
+    # Same admission time for all five, so the newest-first order falls back to patient id (descending).
+    assert [p.patient_id for p in run.patients] == ["P005", "P004"]
 
 
 def test_structured_inclusions_are_code_verdicts_and_skip_validation(tmp_path):
