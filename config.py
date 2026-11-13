@@ -15,8 +15,6 @@ ROOT = Path(__file__).resolve().parent
 # --- Model server -----------------------------------------------------------
 # Ollama's OpenAI-compatible endpoint. docker-compose sets LLM_BASE_URL /
 # OPENAI_BASE_URL; outside docker we fall back to the organiser's Ollama.
-# On the Spark, the team's own Ollama (both models kept loaded, faster) is:
-#   LLM_BASE_URL=http://10.41.30.10:11434/v1
 LLM_BASE_URL = (
     os.getenv("LLM_BASE_URL")
     or os.getenv("OPENAI_BASE_URL")
@@ -46,9 +44,6 @@ MAX_OUTPUT_TOKENS = int(os.getenv("MAX_OUTPUT_TOKENS", "1024"))
 CHARS_PER_TOKEN = 3.0
 
 # --- Agent tool loop ------------------------------------------------------------
-# Stage 1 normally checks every criterion so the clinician sees the full picture.
-# Set STAGE1_STOP_ON_EXCLUSION=1 to skip the rest once an exclusion is met (faster).
-STAGE1_STOP_ON_EXCLUSION = os.getenv("STAGE1_STOP_ON_EXCLUSION", "0") == "1"
 MAX_TOOL_STEPS = int(os.getenv("MAX_TOOL_STEPS", "4"))  # tool rounds per criterion
 MAX_NOTE_CHARS = 1200   # one note's text is cut to this in a tool result
 MAX_NOTES_RETURNED = 4  # search_notes returns at most this many notes
