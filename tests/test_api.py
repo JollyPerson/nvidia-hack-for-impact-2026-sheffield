@@ -273,3 +273,13 @@ def test_dev_reasoning_toggle(monkeypatch):
     assert client.post("/api/dev/models", json={"role": "nope", "reasoning": True}).status_code == 422
     monkeypatch.setenv("ADVOLARE_DEV_MODE", "false")
     assert client.get("/api/dev/models").status_code == 404
+
+
+@pytest.mark.parametrize("raw,want", [(None, 5), ("", 5), ("  ", 5), ("3", 3), ("0", None)])
+def test_max_candidates_empty_env_keeps_default(monkeypatch, raw, want):
+    """docker-compose passes ADVOLARE_MAX_CANDIDATES as an empty string when it is not set."""
+    if raw is None:
+        monkeypatch.delenv("ADVOLARE_MAX_CANDIDATES", raising=False)
+    else:
+        monkeypatch.setenv("ADVOLARE_MAX_CANDIDATES", raw)
+    assert main.max_candidates() == want

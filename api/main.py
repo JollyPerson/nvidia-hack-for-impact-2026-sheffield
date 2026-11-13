@@ -52,19 +52,20 @@ def mock_mode() -> bool:
 def max_candidates() -> int | None:
     """ADVOLARE_MAX_CANDIDATES: screen at most this many prefilter candidates (each costs several model calls).
     0 or empty means no limit."""
-    n = int(os.environ.get("ADVOLARE_MAX_CANDIDATES", "5") or 0)
+    raw = os.environ.get("ADVOLARE_MAX_CANDIDATES", "").strip()  # compose passes it empty when unset
+    n = int(raw) if raw else 5
     return n or None
 
 
 def workers() -> int:
     """ADVOLARE_WORKERS: patients screened at once."""
-    return max(1, int(os.environ.get("ADVOLARE_WORKERS", "2") or 1))
+    return max(1, int(os.environ.get("ADVOLARE_WORKERS", "").strip() or 2))
 
 
 def criteria_workers() -> int:
     """ADVOLARE_CRITERIA_WORKERS: criteria checked at once per patient. Keep workers x this within the
     model server's OLLAMA_NUM_PARALLEL (8 on the Spark)."""
-    return max(1, int(os.environ.get("ADVOLARE_CRITERIA_WORKERS", "4") or 1))
+    return max(1, int(os.environ.get("ADVOLARE_CRITERIA_WORKERS", "").strip() or 4))
 
 
 # Seconds between mock pipeline steps when streaming progress (0 in tests).
