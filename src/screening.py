@@ -60,12 +60,18 @@ VERIFIER_NOTE = (
 )
 
 VERDICT_INSTRUCTIONS = """Now give your verdict on the criterion as ONE JSON object and nothing else:
-{{"verdict": "met" | "not_met" | "insufficient", "reasoning": "<one or two sentences>",
- "citations": [{{"table": "<e.g. ClinicalNotes>", "record_id": "<the row's ID, e.g. NoteID>", "field": "<column name, e.g. NoteText>", "quote": "<exact text copied from that field, or the exact value>"}}]}}
+{{"reasoning": "<one or two sentences>",
+ "citations": [{{"table": "<e.g. ClinicalNotes>", "record_id": "<the row's ID, e.g. NoteID>", "field": "<column name, e.g. NoteText>", "quote": "<exact text copied from that field, or the exact value>"}}],
+ "basis": "direct_evidence" | "nothing_found",
+ "verdict": "met" | "not_met" | "insufficient"}}
 
 Rules:
-- met = the records show the criterion is true for this patient. not_met = the records show it is false.
-- insufficient = the records do not clearly answer it (no evidence, conflicting, or uncertain). Never guess.
+- met = a record directly shows the criterion is TRUE for this patient.
+- not_met = a record directly shows the criterion is FALSE, e.g. "no history of COPD", "not on home oxygen",
+  "CXR: clear lung fields". A record that simply does not mention the topic is NOT evidence of not_met.
+- insufficient = no record directly answers it: nothing relevant found, only unrelated notes, conflicting,
+  or uncertain ("?", "query", "possible", "awaited"). Absence of evidence is insufficient. Never guess.
+- basis = "direct_evidence" only if a cited quote itself states the answer; otherwise "nothing_found".
 - {type_rule}
 - met and not_met MUST cite at least one record you actually saw. Copy quotes exactly; do not paraphrase.
 - Only cite records returned by the tools or shown above."""
@@ -180,7 +186,7 @@ def screen_patient(
     """Stage 1 then (if shortlisted) stage 2 for every notes criterion of the study."""
     tools = PatientTools(conn, patient_id)
     criteria = [(i, c) for i, c in enumerate(study.criteria) if c.kind == CriterionKind.notes]
-    # Exclusions first, so a clear exclusion can stop stage 1 early and save model time.
+    # Exclusions first, so a clear exclusion can stop stage 1 early (if configured).
     criteria.sort(key=lambda ic: ic[1].type != CriterionType.exclusion)
 
     assessments = {_criterion_id(c, i): CriterionAssessment(criterion_id=_criterion_id(c, i)) for i, c in criteria}
@@ -192,7 +198,8 @@ def screen_patient(
         a.stage1 = screen_criterion(llm, tools, c, "screener", audit=audit)
         if _excluded_by(a.stage1, c):
             result.reasons.append(f"Stage 1: exclusion met: {c.description}")
-            break
+            if config.STAGE1_STOP_ON_EXCLUSION:
+                break
     result.shortlisted = not result.reasons
 
     # Stage 2: verifier, only for shortlisted patients

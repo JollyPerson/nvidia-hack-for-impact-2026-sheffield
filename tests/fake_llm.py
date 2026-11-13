@@ -61,7 +61,9 @@ class RuleBasedClient:
             return response(content="done")
 
         notes = [n for r in tool_results for n in r.get("notes", [])]
-        return response(content=json.dumps(self._judge(notes, oxygen)))
+        verdict = self._judge(notes, oxygen)
+        verdict["basis"] = "direct_evidence" if verdict["citations"] else "nothing_found"
+        return response(content=json.dumps(verdict))
 
     @staticmethod
     def _judge(notes, oxygen):

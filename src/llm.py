@@ -25,10 +25,12 @@ log = logging.getLogger(__name__)
 
 # JSON schema the server must follow for a verdict. Written out flat (no $refs)
 # so Ollama's grammar converter handles it. Mirrors Verdict / Citation in models.py.
+# Property order matters: the model writes reasoning and evidence BEFORE it
+# commits to a verdict. "basis" is not part of Verdict; code uses it (see
+# parse_verdict) and then drops it.
 VERDICT_SCHEMA = {
     "type": "object",
     "properties": {
-        "verdict": {"type": "string", "enum": [v.value for v in VerdictValue]},
         "reasoning": {"type": "string"},
         "citations": {
             "type": "array",
@@ -43,8 +45,10 @@ VERDICT_SCHEMA = {
                 "required": ["table", "record_id", "field", "quote"],
             },
         },
+        "basis": {"type": "string", "enum": ["direct_evidence", "nothing_found"]},
+        "verdict": {"type": "string", "enum": [v.value for v in VerdictValue]},
     },
-    "required": ["verdict", "reasoning", "citations"],
+    "required": ["reasoning", "citations", "basis", "verdict"],
 }
 
 RESPONSE_FORMAT = {
@@ -85,14 +89,29 @@ def fit_to_budget(messages: list[dict], tools: list[dict] | None = None) -> list
 
 
 def parse_verdict(text: str | None) -> Verdict:
-    """Parse model text into a Verdict. Raises ValueError / ValidationError."""
+    """Parse model text into a Verdict. Raises ValueError / ValidationError.
+
+    Code rule: absence of evidence is never evidence. If the model says it
+    found nothing relevant (basis = nothing_found), the verdict becomes
+    `insufficient` whatever the model chose.
+    """
     if not text:
         raise ValueError("empty response")
     text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL)  # stray reasoning
     start, end = text.find("{"), text.rfind("}")
     if start == -1 or end < start:
         raise ValueError("no JSON object in response")
-    return Verdict.model_validate_json(text[start : end + 1])
+    data = json.loads(text[start : end + 1])
+    if not isinstance(data, dict):
+        raise ValueError("response is not a JSON object")
+    basis = data.pop("basis", None)
+    if basis == "nothing_found" and data.get("verdict") != VerdictValue.insufficient.value:
+        data["reasoning"] = (
+            f"[code: model found no direct evidence, so {data.get('verdict')} -> insufficient] "
+            + str(data.get("reasoning", ""))
+        )
+        data["verdict"] = VerdictValue.insufficient.value
+    return Verdict.model_validate(data)
 
 
 class LLM:

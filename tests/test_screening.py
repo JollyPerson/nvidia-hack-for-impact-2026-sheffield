@@ -37,8 +37,8 @@ def test_five_patients_end_to_end(conn):
         r = results[pid]
         for a in r.assessments:
             want = expected[a.criterion_id]
-            got = a.stage1.verdict.value if a.stage1 else None
-            assert got == want, (pid, a.criterion_id)
+            assert a.stage1 is not None, (pid, a.criterion_id)
+            assert a.stage1.verdict.value == want, (pid, a.criterion_id)
     # P002's exclusion is met in stage 1 -> not shortlisted, never reaches the verifier.
     assert not results["P002"].shortlisted
     assert all(a.stage2 is None for a in results["P002"].assessments)
@@ -125,6 +125,32 @@ def test_verdict_uses_json_schema():
     fake = ScriptedClient([response(content=GOOD)])
     LLM(fake).verdict("verifier", [{"role": "user", "content": "x"}])
     assert fake.requests[0]["response_format"]["type"] == "json_schema"
+
+
+def test_nothing_found_is_forced_to_insufficient():
+    # What both real models did on P005: not_met, citing an unrelated note.
+    text = json.dumps({"reasoning": "no mention of COPD", "basis": "nothing_found", "verdict": "not_met",
+                       "citations": [{"table": "ClinicalNotes", "record_id": "N-5001", "field": "NoteText",
+                                      "quote": "Pt settled overnight"}]})
+    v = parse_verdict(text)
+    assert v.verdict == VerdictValue.insufficient
+    assert v.citations  # evidence kept for the clinician to see
+    assert "code:" in v.reasoning
+
+
+def test_direct_evidence_keeps_verdict():
+    data = json.loads(GOOD) | {"basis": "direct_evidence"}
+    assert parse_verdict(json.dumps(data)).verdict == VerdictValue.met
+
+
+def test_stop_on_exclusion_flag(conn, monkeypatch):
+    monkeypatch.setattr(config, "STAGE1_STOP_ON_EXCLUSION", True)
+    r = screen_patient(LLM(RuleBasedClient()), conn, STUDY, "P002")
+    assert {a.criterion_id: a.stage1 for a in r.assessments}["C1"] is None
+
+
+def test_verdict_schema_puts_verdict_last():
+    assert list(llm_mod.VERDICT_SCHEMA["properties"])[-1] == "verdict"
 
 
 def test_parse_verdict_handles_fences_and_think():

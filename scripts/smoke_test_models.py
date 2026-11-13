@@ -4,6 +4,9 @@
     python scripts/smoke_test_models.py            # all five patients
     python scripts/smoke_test_models.py P001       # just one, quicker
 
+    # use the team's own Ollama, which keeps both models loaded (faster):
+    LLM_BASE_URL=http://10.41.30.10:11434/v1 python scripts/smoke_test_models.py
+
 Prints each verdict next to the correct answer and saves the full prompts and
 outputs to logs/ so you can see what the models did.
 """
@@ -63,9 +66,12 @@ def main() -> int:
                 right += final == want
             mark = "" if want is None else ("YES" if final == want else "NO")
             print(f"{pid:8} {CASE[pid]:28} {a.criterion_id:5} {str(want or '-'):13} {s1:13} {s2:13} {mark}")
+            if mark == "NO":
+                why = (a.stage2 or a.stage1).reasoning
+                print(f"{'':8} why: {why[:160]}")
         print(f"{'':8} shortlisted={result.shortlisted}  ({time.time() - t0:.0f}s)")
 
-    print(f"\nCorrect: {right}/{total}")
+    print(f"\nCorrect: {right}/{total}   (stage 2 '-' means the patient was dropped at stage 1)")
     log_dir = ROOT / "logs"
     log_dir.mkdir(exist_ok=True)
     log_path = log_dir / f"smoke_test_{datetime.now():%Y%m%d_%H%M%S}.json"

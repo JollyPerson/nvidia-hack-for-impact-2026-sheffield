@@ -8,7 +8,7 @@ Study criteria (both `notes` kind, so they go to the LLMs):
   C2 exclusion: COPD needing long-term home oxygen
 
   P001  clear match              C1 met,          C2 not_met
-  P002  clear exclusion          C2 met  -> dropped at stage 1
+  P002  clear exclusion          C1 met, C2 met -> dropped at stage 1 (no stage 2)
   P003  ambiguous X-ray          C1 insufficient  ("?consolidation vs atelectasis")
   P004  negation trap            C1 met,          C2 not_met ("COPD ... NOT on home O2")
   P005  nothing in the records   C1 insufficient, C2 insufficient ("I don't know" is right)
@@ -48,10 +48,10 @@ STUDY = Study(
     ],
 )
 
-# patient -> criterion -> correct verdict. None = not asked (patient already dropped).
+# patient -> criterion -> correct verdict.
 EXPECTED = {
     "P001": {"C1": "met", "C2": "not_met"},
-    "P002": {"C1": None, "C2": "met"},
+    "P002": {"C1": "met", "C2": "met"},
     "P003": {"C1": "insufficient", "C2": "not_met"},
     "P004": {"C1": "met", "C2": "not_met"},
     "P005": {"C1": "insufficient", "C2": "insufficient"},
