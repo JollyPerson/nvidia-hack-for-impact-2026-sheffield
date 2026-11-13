@@ -84,31 +84,31 @@ def _cap_patients():
             reasons=list(reasons))))
 
     E, R, X = FinalStatus.likely_eligible, FinalStatus.needs_review, FinalStatus.excluded
-    add("MRN-100231", 72, "Female", E,
+    add("MRN100231", 72, "Female", E,
         "CAP confirmed on chest X-ray, CURB-65 of 2. No COPD, not immunosuppressed, has capacity.",
-        sql_checks("MRN-100231", 72, 2, "OB-77120", 58, "PA-55310"),
+        sql_checks("MRN100231", 72, 2, "OB-77120", 58, "PA-55310"),
         {"C3": (V("met", "N-1042", "CXR: R lower lobe consolidation c/w CAP"), V("met", "N-1042", "R lower lobe consolidation c/w CAP")),
          "C5": (V("not_met", "N-1042", "No hx of COPD, not on home O2"), V("not_met", "N-1042", "No hx of COPD, not on home O2")),
          "C6": (V("not_met", "N-1043", "No immunosuppressants. No recent chemo"), V("not_met", "N-1043", "No immunosuppressants")),
          "C7": (V("not_met", "N-1044", "Alert and orientated, has capacity to make decisions about treatment"),
                 V("not_met", "N-1044", "has capacity to make decisions about treatment"))})
-    add("MRN-100655", 77, "Female", E,
+    add("MRN100655", 77, "Female", E,
         "Left basal pneumonia on X-ray, CURB-65 of 3. No exclusions found by either model.",
-        sql_checks("MRN-100655", 77, 3, "OB-77391", 47, "PA-55621"),
+        sql_checks("MRN100655", 77, 3, "OB-77391", 47, "PA-55621"),
         {"C3": (V("met", "N-1201", "CXR L basal consolidation. Dx CAP, IV co-amox started"), V("met", "N-1201", "Dx CAP")),
          "C5": (V("not_met", "N-1201", "Asthma as a child, no COPD"), V("not_met", "N-1201", "no COPD")),
          "C6": (V("not_met", "N-1202", "Not on steroids or immunosuppressants"), V("not_met", "N-1202", "Not on steroids or immunosuppressants")),
          "C7": (V("not_met", "N-1203", "Capacity assessed: has capacity"), V("not_met", "N-1203", "has capacity"))})
-    add("MRN-100834", 70, "Female", E,
+    add("MRN100834", 70, "Female", E,
         "Right middle lobe pneumonia, CURB-65 of 2. No exclusions.",
-        sql_checks("MRN-100834", 70, 2, "OB-77540", 66, "PA-55790"),
+        sql_checks("MRN100834", 70, 2, "OB-77540", 66, "PA-55790"),
         {"C3": (V("met", "N-1330", "RML consolidation, clinical picture of CAP"), V("met", "N-1330", "clinical picture of CAP")),
          "C5": (V("not_met", "N-1330", "Ex-smoker, spirometry normal 2024, no COPD"), V("not_met", "N-1330", "no COPD")),
          "C6": (V("not_met", "N-1331", "no immunosuppression"), V("not_met", "N-1331", "no immunosuppression")),
          "C7": (V("not_met", "N-1332", "Lives alone, independent, capacity not in doubt"), V("not_met", "N-1332", "capacity not in doubt"))})
-    add("MRN-100517", 67, "Female", R,
+    add("MRN100517", 67, "Female", R,
         "The models disagree on COPD. The note mentions COPD and home oxygen, but about the patient's mother.",
-        sql_checks("MRN-100517", 67, 2, "OB-77202", 71, "PA-55402"),
+        sql_checks("MRN100517", 67, 2, "OB-77202", 71, "PA-55402"),
         {"C3": (V("met", "N-1088", "Bilateral lower zone consolidation, treating as CAP"), V("met", "N-1088", "treating as CAP")),
          "C5": (V("met", "N-1089", "COPD on home oxygen", reasoning="The note mentions COPD on home oxygen."),
                 V("not_met", "N-1089", "Mother had COPD on home oxygen. Pt never smoked, no resp hx",
@@ -116,9 +116,9 @@ def _cap_patients():
          "C6": (V("not_met", "N-1089", "no immunosuppressants"), V("not_met", "N-1089", "no immunosuppressants")),
          "C7": (V("not_met", "N-1090", "has capacity"), V("not_met", "N-1090", "has capacity"))},
         flags={"C5": [DISAGREE.model_copy(update={"detail": "Stage 1 said met, stage 2 said not met. Check who the note is about."})]})
-    add("MRN-100602", 59, "Male", R,
+    add("MRN100602", 59, "Male", R,
         "A quote from stage 1 was not found in the cited note, so the steroid exclusion needs checking.",
-        sql_checks("MRN-100602", 59, 2, "OB-77260", 81, "PA-55470"),
+        sql_checks("MRN100602", 59, 2, "OB-77260", 81, "PA-55470"),
         {"C3": (V("met", "N-1110", "Consolidation L upper lobe, CAP"), V("met", "N-1110", "CAP")),
          "C5": (V("not_met", "N-1110", "No COPD"), V("not_met", "N-1110", "No COPD")),
          "C6": (V("met", "N-1111", "on prednisolone 40mg daily"),
@@ -126,24 +126,24 @@ def _cap_patients():
          "C7": (V("not_met", "N-1112", "has capacity"), V("not_met", "N-1112", "has capacity"))},
         flags={"C6": [Flag(type=FlagType.citation_failed, stage=1,
                            detail="The quote 'on prednisolone 40mg daily' does not appear in note N-1111."), DISAGREE]})
-    add("MRN-100790", 64, "Male", R,
+    add("MRN100790", 64, "Male", R,
         "Confused on admission and capacity has not been assessed yet.",
-        sql_checks("MRN-100790", 64, 3, "OB-77488", 62, "PA-55730"),
+        sql_checks("MRN100790", 64, 3, "OB-77488", 62, "PA-55730"),
         {"C3": (V("met", "N-1290", "CXR R basal consolidation, CAP"), V("met", "N-1290", "CAP")),
          "C5": (V("not_met", "N-1290", "no resp hx"), V("not_met", "N-1290", "no resp hx")),
          "C6": (V("not_met", "N-1291", "no immunosuppression"), V("not_met", "N-1291", "no immunosuppression")),
          "C7": (V("insufficient", "N-1292", "Confused on admission, ?delirium. Capacity not yet assessed"),
                 V("insufficient", "N-1292", "Capacity not yet assessed"))})
-    add("MRN-100488", 81, "Male", X,
+    add("MRN100488", 81, "Male", X,
         "COPD on long-term home oxygen, confirmed by both models.",
-        sql_checks("MRN-100488", 81, 3, "OB-77180", 44, "PA-55360"),
+        sql_checks("MRN100488", 81, 3, "OB-77180", 44, "PA-55360"),
         {"C3": (V("met", "N-1061", "LLL consolidation, CAP"), V("met", "N-1061", "LLL consolidation, CAP")),
          "C5": (V("met", "N-1062", "Known COPD, on home O2 2L via concentrator 16h/day"),
                 V("met", "N-1062", "on home O2 2L via concentrator 16h/day"))},
         reasons=["C5: COPD on long-term home oxygen"])
-    add("MRN-100713", 88, "Male", X,
+    add("MRN100713", 88, "Male", X,
         "Receiving end-of-life care, confirmed by both models.",
-        sql_checks("MRN-100713", 88, 4, "OB-77420", 35, "PA-55660"),
+        sql_checks("MRN100713", 88, 4, "OB-77420", 35, "PA-55660"),
         {"C3": (V("met", "N-1250", "Aspiration vs CAP, R base"), V("met", "N-1250", "Aspiration vs CAP, R base")),
          "C7": (V("met", "N-1251", "On end of life care pathway, family aware"), V("met", "N-1251", "On end of life care pathway"))},
         reasons=["C7: receiving end-of-life care"])
@@ -151,12 +151,12 @@ def _cap_patients():
 
 
 CONTACTS = {
-    "MRN-100231": Contact(patient_id="MRN-100231", name="Margaret Hill", mobile="07700 900231", email="m.hill@example.com"),
-    "MRN-100655": Contact(patient_id="MRN-100655", name="Joan Patel", mobile="07700 900655", email="j.patel@example.com"),
-    "MRN-100834": Contact(patient_id="MRN-100834", name="Susan Clarke", mobile="07700 900834", email="s.clarke@example.com"),
-    "MRN-100517": Contact(patient_id="MRN-100517", name="Priya Singh", mobile="07700 900517", email="p.singh@example.com"),
-    "MRN-100602": Contact(patient_id="MRN-100602", name="David Owen", mobile="07700 900602", email="d.owen@example.com"),
-    "MRN-100790": Contact(patient_id="MRN-100790", name="Robert King", mobile="07700 900790", email="r.king@example.com"),
+    "MRN100231": Contact(patient_id="MRN100231", mobile_number="07700 900231", email="m.hill@example.com"),
+    "MRN100655": Contact(patient_id="MRN100655", mobile_number="07700 900655", email="j.patel@example.com"),
+    "MRN100834": Contact(patient_id="MRN100834", mobile_number="07700 900834", email="s.clarke@example.com"),
+    "MRN100517": Contact(patient_id="MRN100517", mobile_number="07700 900517", email="p.singh@example.com"),
+    "MRN100602": Contact(patient_id="MRN100602", mobile_number="07700 900602", email="d.owen@example.com"),
+    "MRN100790": Contact(patient_id="MRN100790", mobile_number="07700 900790", email="r.king@example.com"),
 }
 
 

@@ -37,6 +37,20 @@ SEED = 42
 # Ask the server not to "think" out loud: thinking burns the 8k budget.
 # Set REASONING_EFFORT="" to send nothing.
 REASONING_EFFORT = os.getenv("REASONING_EFFORT", "none")
+# Reasoning ("thinking") per role: off (default) sends REASONING_EFFORT ("none") on every call;
+# on lets the model think. LLM_REASONING sets both; SCREENER_/VERIFIER_REASONING win over it.
+# The web app's developer mode can override these at runtime (src/llm.py REASONING_OVERRIDES).
+REASONING = {
+    role: (os.getenv(f"{role.upper()}_REASONING") or os.getenv("LLM_REASONING") or "off").strip().lower()
+    in {"on", "true", "1", "yes"}
+    for role in ("screener", "verifier")
+}
+# Thinking uses output tokens before the answer, so allow more when it is on (Qwen came back
+# empty at 300 tokens). The prompt budget shrinks to match (8,192 total per request).
+# Stage 2 (the verifier model). ADVOLARE_VERIFIER=off screens with the screener model alone (single-model
+# mode); the web app's developer mode can override it (src/llm.py STAGE_OVERRIDES).
+VERIFIER_ENABLED = os.getenv("ADVOLARE_VERIFIER", "on").strip().lower() not in {"off", "false", "0", "no"}
+REASONING_MAX_OUTPUT_TOKENS = int(os.getenv("REASONING_MAX_OUTPUT_TOKENS", "4096"))
 
 # --- Token budget (organiser hard limit: 8,192 tokens per request) -------------
 CONTEXT_TOKENS = 8192
@@ -52,6 +66,12 @@ STAGE1_STOP_ON_EXCLUSION = os.getenv("STAGE1_STOP_ON_EXCLUSION", "0") == "1"
 MAX_TOOL_STEPS = int(os.getenv("MAX_TOOL_STEPS", "4"))  # tool rounds per criterion
 MAX_NOTE_CHARS = 1200   # one note's text is cut to this in a tool result
 MAX_NOTES_RETURNED = 4  # search_notes returns at most this many notes
+# Each check starts with the patient's own notes in the prompt (newest first, whole notes only), so the
+# model rarely needs to search: about 2 calls per check instead of about 5. Capped so the prompt still
+# fits the 8k budget; 0 turns it off (the model then finds notes with search_notes only).
+NOTES_IN_PROMPT_CHARS = int(os.getenv("NOTES_IN_PROMPT_CHARS", "8000"))
+# When every note fits in the prompt, check a criterion in one model call (no tool loop). 0 = tool loop.
+ONE_CALL_CHECKS = os.getenv("ONE_CALL_CHECKS", "1").strip().lower() not in ("0", "false", "no", "off")
 MAX_ROWS_RETURNED = 15  # labs / observations / diagnoses rows per tool call
 
 # --- Data -------------------------------------------------------------------------
@@ -61,3 +81,9 @@ REFERENCE_DATE = os.getenv("REFERENCE_DATE")  # e.g. "2026-11-13"
 # Fixed "now" for the prefilter's ages and time windows. Matches the fixed
 # "now" in data/generate.py, so the synthetic data never ages out of a window.
 REFERENCE_NOW = datetime.fromisoformat(os.getenv("REFERENCE_NOW", "2026-11-13T09:00:00"))
+
+# --- Pre-extracted patient facts (src/facts.py) ------------------------------------
+# On: a notes criterion in the fact list is answered by code from PatientFacts (filled once at ingest by
+# data/extract_facts.py), with no model call; anything not covered is screened live as before.
+# Off, or PatientFacts missing/incomplete for a patient: live screening only.
+FACTS_ENABLED = os.getenv("ADVOLARE_FACTS", "on").strip().lower() not in {"off", "false", "0", "no"}

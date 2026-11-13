@@ -5,9 +5,9 @@ It serves the JSON API under `/api` (interactive docs at `/docs`) and the three 
 
 | File | What it owns | Lifetime |
 |---|---|---|
-| `main.py` | Every HTTP endpoint, the in-memory store (studies, runs, decisions, audit log) and the live progress stream (`GET /api/runs/{run_id}/events`, server-sent events). | Permanent |
-| `schemas.py` | Shapes only the browser needs, built on `src/models.py` without changing it: `PatientView` (wraps `PatientResult` with age, sex, summary and the clinician's decision), `Funnel`, `TraceStep`, `ScreeningRun`, `Contact`, request/response bodies. Nothing in `src/` imports these. | Permanent |
-| `mock_data.py` | Synthetic studies and screening results with the shapes of `src/models.py`, so the UI works before the pipeline exists. | **Temporary**: delete once the real pipeline is wired in |
+| `main.py` | Every HTTP endpoint. Runs `src.pipeline.run_screening` in a background thread per screening and streams its progress (`GET /api/runs/{run_id}/events`, server-sent events). Studies, runs, decisions and the audit log go through `src/store.py` (app database). | Permanent |
+| `schemas.py` | Shapes only the browser needs, built on `src/models.py` without changing it: `PatientView` (wraps `PatientResult` with age, sex, summary and the clinician's decision), `RunView` (wraps `ScreeningRun` with the funnel and progress steps), `Funnel`, `TraceStep`, `Contact` (mirrors `PatientContacts`), request/response bodies. Nothing in `src/` imports these. | Permanent |
+| `mock_data.py` | Canned screening results with the shapes of `src/models.py`, used only when `ADVOLARE_MOCK=true`; also the free-text criteria drafter. | Fallback for demos without the Spark |
 | `features.py` | Feature flags for the extras, read from environment variables (below). | Permanent |
 | `extras.py` | Logic for the extra features: do-not-contact counts, fairness check, what-if, invitation letter, FHIR R5 export with SNOMED CT codes, screening log. Endpoints for them are in `main.py`. | Permanent (mock baselines inside are marked) |
 
@@ -41,12 +41,27 @@ Flags are read on every request, so a restart picks up a change; no rebuild is n
   or put the same lines in `~/trialmatch/features.env` on the Spark and rerun `bash ~/trialmatch/deploy/deploy.sh`.
   `deploy/docker-compose.yml` passes them into the `web` container.
 
-## Wiring in the real pipeline
+## Screening: real pipeline or mock
 
-1. Replace `_run_pipeline(study)` in `main.py` with a call to `src.pipeline`. It must return the run's `PatientView` list, funnel counts and trace steps.
-2. Stream real progress: `run_events` currently replays the mock trace with a delay (`ADVOLARE_MOCK_STEP_DELAY`). Yield one `step` event per stage as the pipeline finishes it.
-3. Read age and sex from `Patients`, and contact details from `PatientContacts` only inside `_contact_if_approved`.
-4. Delete `mock_data.py`. The pages in `web/` need no changes.
+| Setting | Default | What it does |
+|---|---|---|
+| `ADVOLARE_MOCK` | `false` | `true` uses the canned results in `mock_data.py` (no warehouse or model server needed) |
+| `ADVOLARE_MAX_CANDIDATES` | `5` (`0` = all on the Spark) | Screen at most this many prefilter candidates per run, most recently admitted first. Each costs about 2 model calls per notes criterion. `0` = all |
+| `ADVOLARE_WORKERS` | `2` | Patients screened at once (threads; each opens its own read-only warehouse connection) |
+| `ADVOLARE_CRITERIA_WORKERS` | `4` | Criteria checked at once per patient, in each stage. Keep `ADVOLARE_WORKERS` x this within the Spark's `OLLAMA_NUM_PARALLEL` (8) |
+| `ONE_CALL_CHECKS` | `1` | When all of a patient's notes fit in the prompt, check each criterion in one model call (notes + coded diagnoses, no tool loop). `0` = tool loop |
+| `ADVOLARE_VERIFIER` | `on` (`off` on the Spark) | `off` = single-model mode: the screener alone, no stage 2. Dev-mode footer: "Stage 2 verifier" |
+| `LLM_REASONING` / `SCREENER_REASONING` / `VERIFIER_REASONING` | `off` | `on` lets that model think (no `reasoning_effort` sent, up to `REASONING_MAX_OUTPUT_TOKENS`=4096 output tokens). Off always sends `reasoning_effort: "none"`. The developer-mode footer has a toggle per model |
+| `ADVOLARE_MOCK_STEP_DELAY` | `0.8` | Seconds between mock progress steps |
+| `APP_DB_PATH` | `data/app.db` | App database (`src/store.py`). Created and seeded with the demo studies on start-up |
+| `DB_PATH` | `data/warehouse.db` | Warehouse (`config.py`). Build it with `python data/generate.py && python data/load_notes.py` (notes from `data/notes_cache.json`); the Docker image does this |
+| `LLM_BASE_URL` / `OPENAI_BASE_URL` | `http://127.0.0.1:11434/v1` | Model server (`config.py`) |
+
+A run: `POST /api/studies/{id}/runs` saves a `running` ScreeningRun and starts a thread that calls
+`src.pipeline.run_screening`. The pipeline reports each step (running, then done with seconds); the SSE stream
+forwards them and ends with `complete`, or `failed` with the error. The finished run is saved with `store.save_run`.
+Age and sex come from `Patients`; contact details from `PatientContacts`, read only inside `_contact_if_approved`.
+The summary line is the decide step's reasons.
 
 ## Rules this layer keeps (from AGENTS.md)
 

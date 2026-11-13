@@ -59,6 +59,25 @@ RESPONSE_FORMAT = {
 TRUNCATED = " …[truncated]"
 
 
+# Developer-mode overrides of config.REASONING, per role (set by the web app; lost on restart).
+REASONING_OVERRIDES: dict[str, bool] = {}
+STAGE_OVERRIDES: dict[str, bool] = {}  # developer mode: {"verifier": False} = single-model mode
+
+
+def verifier_on() -> bool:
+    """Whether stage 2 (the verifier model) runs. ADVOLARE_VERIFIER, or a developer-mode override."""
+    return STAGE_OVERRIDES.get("verifier", config.VERIFIER_ENABLED)
+
+
+def reasoning_on(role: str) -> bool:
+    """Whether this role's model may think. Off unless config or developer mode turns it on."""
+    return REASONING_OVERRIDES.get(role, config.REASONING.get(role, False))
+
+
+def max_output_tokens(role: str | None = None) -> int:
+    return config.REASONING_MAX_OUTPUT_TOKENS if role and reasoning_on(role) else config.MAX_OUTPUT_TOKENS
+
+
 class PromptTooLong(Exception):
     """The prompt cannot be cut down to fit the 8k token limit."""
 
@@ -70,13 +89,13 @@ def estimate_tokens(messages: list[dict], tools: list[dict] | None = None) -> in
     return int(chars / config.CHARS_PER_TOKEN) + 1
 
 
-def fit_to_budget(messages: list[dict], tools: list[dict] | None = None) -> list[dict]:
+def fit_to_budget(messages: list[dict], tools: list[dict] | None = None, role: str | None = None) -> list[dict]:
     """Return a copy of `messages` that fits the per-request token limit.
 
     Only tool results are shortened (largest first); the system prompt,
     criterion and the model's own turns are never cut.
     """
-    budget = config.CONTEXT_TOKENS - config.MAX_OUTPUT_TOKENS
+    budget = config.CONTEXT_TOKENS - max_output_tokens(role)
     msgs = copy.deepcopy(messages)
     while estimate_tokens(msgs, tools) > budget:
         tool_msgs = [m for m in msgs if m.get("role") == "tool" and len(m["content"]) > 200]
@@ -86,6 +105,10 @@ def fit_to_budget(messages: list[dict], tools: list[dict] | None = None) -> list
         text = biggest["content"].removesuffix(TRUNCATED)
         biggest["content"] = text[: len(text) // 2] + TRUNCATED
     return msgs
+
+
+# Marks a verdict whose model said it found nothing relevant (basis = nothing_found).
+NOTHING_FOUND = "[nothing found]"
 
 
 def parse_verdict(text: str | None) -> Verdict:
@@ -111,6 +134,8 @@ def parse_verdict(text: str | None) -> Verdict:
             + str(data.get("reasoning", ""))
         )
         data["verdict"] = VerdictValue.insufficient.value
+    if basis == "nothing_found":
+        data["reasoning"] = NOTHING_FOUND + " " + str(data.get("reasoning", ""))
     return Verdict.model_validate(data)
 
 
@@ -122,8 +147,8 @@ class LLM:
             api_key=config.LLM_API_KEY,
             timeout=config.LLM_TIMEOUT_SECONDS,
         )
-        # Optional request fields we drop for good if the server rejects them.
-        self._send_reasoning_effort = bool(config.REASONING_EFFORT)
+        # Optional request field we drop for good if the server rejects it. reasoning_effort is never
+        # dropped: without it both models think by default (about 30x slower, Qwen can return nothing).
         self._schema_supported = True
 
     # -- low level -------------------------------------------------------------
@@ -134,21 +159,17 @@ class LLM:
             messages=messages,
             temperature=config.TEMPERATURE,
             seed=config.SEED,
-            max_tokens=config.MAX_OUTPUT_TOKENS,
+            max_tokens=max_output_tokens(role),
             **extra,
         )
-        if self._send_reasoning_effort:
-            kwargs["reasoning_effort"] = config.REASONING_EFFORT
+        if not reasoning_on(role):
+            kwargs["reasoning_effort"] = config.REASONING_EFFORT or "none"
         if "response_format" in kwargs and not self._schema_supported:
             kwargs["response_format"] = {"type": "json_object"}
         try:
             return self.client.chat.completions.create(**kwargs)
         except openai.BadRequestError as e:
             msg = str(e).lower()
-            if self._send_reasoning_effort and "reasoning" in msg:
-                log.warning("server rejected reasoning_effort; not sending it again")
-                self._send_reasoning_effort = False
-                return self._create(role, messages, **extra)
             if self._schema_supported and ("response_format" in msg or "schema" in msg):
                 log.warning("server rejected json_schema; falling back to json_object")
                 self._schema_supported = False
@@ -160,7 +181,7 @@ class LLM:
     def chat(self, role: str, messages: list[dict], tools: list[dict] | None = None) -> dict:
         """One tool-loop step. Returns the assistant message as a plain dict:
         {"role": "assistant", "content": str, "tool_calls": [...]}"""
-        msgs = fit_to_budget(messages, tools)
+        msgs = fit_to_budget(messages, tools, role)
         extra = {"tools": tools, "tool_choice": "auto"} if tools else {}
         resp = self._create(role, msgs, **extra)
         m = resp.choices[0].message
@@ -183,7 +204,7 @@ class LLM:
         error = ""
         for attempt in (1, 2):
             try:
-                resp = self._create(role, fit_to_budget(msgs), response_format=RESPONSE_FORMAT)
+                resp = self._create(role, fit_to_budget(msgs, role=role), response_format=RESPONSE_FORMAT)
             except PromptTooLong as e:
                 return _fallback(f"prompt too long: {e}")
             text = resp.choices[0].message.content

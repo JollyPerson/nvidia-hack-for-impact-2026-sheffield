@@ -223,15 +223,34 @@ def test_parse_verdict_handles_fences_and_think():
     assert v.verdict == VerdictValue.met
 
 
-def test_rejected_reasoning_effort_is_dropped():
+def test_reasoning_effort_is_never_dropped():
+    """Without reasoning_effort both models think by default (Qwen can return nothing), so a server that
+    rejects it is an error for that call, not a reason to stop sending it."""
     req = httpx.Request("POST", "http://x")
     err = openai.BadRequestError("unknown field reasoning_effort", response=httpx.Response(400, request=req), body=None)
-    fake = ScriptedClient([err, response(content=GOOD), response(content=GOOD)])
+    fake = ScriptedClient([err, response(content=GOOD)])
+    llm = LLM(fake)
+    with pytest.raises(openai.BadRequestError):
+        llm.verdict("screener", [{"role": "user", "content": "x"}])
+    llm.verdict("screener", [{"role": "user", "content": "x"}])
+    assert all(r["reasoning_effort"] == "none" for r in fake.requests)
+
+
+def test_reasoning_can_be_switched_on_per_role(monkeypatch):
+    monkeypatch.setitem(config.REASONING, "verifier", True)
+    fake = ScriptedClient([response(content=GOOD), response(content=GOOD)])
     llm = LLM(fake)
     llm.verdict("screener", [{"role": "user", "content": "x"}])
-    llm.verdict("screener", [{"role": "user", "content": "x"}])
-    assert "reasoning_effort" in fake.requests[0]
-    assert "reasoning_effort" not in fake.requests[1] and "reasoning_effort" not in fake.requests[2]
+    llm.verdict("verifier", [{"role": "user", "content": "x"}])
+    screener, verifier = fake.requests
+    assert screener["reasoning_effort"] == "none" and screener["max_tokens"] == config.MAX_OUTPUT_TOKENS
+    assert "reasoning_effort" not in verifier and verifier["max_tokens"] == config.REASONING_MAX_OUTPUT_TOKENS
+
+
+def test_reasoning_override_wins_over_config(monkeypatch):
+    monkeypatch.setitem(config.REASONING, "screener", True)
+    monkeypatch.setattr(llm_mod, "REASONING_OVERRIDES", {"screener": False})
+    assert llm_mod.reasoning_on("screener") is False
 
 
 def test_fit_to_budget_truncates_tool_results_only():
@@ -287,3 +306,85 @@ def test_bad_tool_calls_return_errors_not_exceptions(conn):
     assert json.loads(t.run("get_labs", '{"test": "CRP"}'))["rows"][0]["PathologyID"] == "L-1001"
     assert json.loads(t.run("get_diagnoses", None))["rows"]
     assert json.loads(t.run("get_observations", "{}"))["rows"][0]["ObservationID"] == "O-1001"
+
+
+def test_criteria_in_parallel_give_the_same_verdicts():
+    import sqlite3
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as d:
+        path = Path(d) / "w.db"
+        build_db(path).close()
+        conn = sqlite3.connect(path, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        from src.pipeline import _SharedConn
+        for pid in EXPECTED:
+            one = screen_patient(LLM(RuleBasedClient()), conn, STUDY, pid)
+            many = screen_patient(LLM(RuleBasedClient()), _SharedConn(conn), STUDY, pid, workers=4)
+            assert many.model_dump() == one.model_dump(), pid
+        conn.close()
+
+
+def test_notes_are_in_the_first_prompt(conn):
+    fake = ScriptedClient([response(content="done"), response(content=GOOD)])
+    screen_criterion(LLM(fake), PatientTools(conn, "P002"), STUDY.criteria[1], "screener")
+    first = fake.requests[0]["messages"]
+    user = next(m["content"] for m in first if m["role"] == "user")
+    system = first[0]["content"]
+    assert "Clinical notes for this patient" in user and "home O2" in user.replace("oxygen", "O2")
+    assert "shown in full" in system
+    assert len(fake.requests) == 2  # read the notes, said done, gave the verdict: no tool calls needed
+    assert not any(c[1] in user for c in CONTACTS if c[1])  # contact details never reach a model
+
+
+def test_notes_in_prompt_can_be_switched_off(conn, monkeypatch):
+    monkeypatch.setattr(config, "NOTES_IN_PROMPT_CHARS", 0)
+    fake = ScriptedClient([response(content="done"), response(content=GOOD)])
+    screen_criterion(LLM(fake), PatientTools(conn, "P002"), STUDY.criteria[1], "screener")
+    user = next(m["content"] for m in fake.requests[0]["messages"] if m["role"] == "user")
+    assert "Clinical notes for this patient" not in user
+    assert "search_notes" in fake.requests[0]["messages"][0]["content"]
+
+
+def test_notes_in_prompt_respect_the_limit(conn, monkeypatch):
+    monkeypatch.setattr(config, "NOTES_IN_PROMPT_CHARS", 60)  # smaller than any one note
+    fake = ScriptedClient([response(content="done"), response(content=GOOD)])
+    screen_criterion(LLM(fake), PatientTools(conn, "P002"), STUDY.criteria[1], "screener")
+    user = next(m["content"] for m in fake.requests[0]["messages"] if m["role"] == "user")
+    assert "Clinical notes for this patient" not in user
+
+
+NOTHING = json.dumps({"verdict": "insufficient", "reasoning": "no mention", "citations": [], "basis": "nothing_found"})
+
+
+def test_nothing_found_after_all_notes_is_marked(conn):
+    from src.screening import ALL_NOTES_READ
+    fake = ScriptedClient([response(content="done"), response(content=NOTHING)])
+    v = screen_criterion(LLM(fake), PatientTools(conn, "P005"), STUDY.criteria[1], "screener")
+    assert v.verdict == VerdictValue.insufficient and v.reasoning.startswith(ALL_NOTES_READ)
+
+
+def test_nothing_found_without_all_notes_is_not_marked(conn, monkeypatch):
+    from src.screening import ALL_NOTES_READ
+    monkeypatch.setattr(config, "NOTES_IN_PROMPT_CHARS", 0)
+    fake = ScriptedClient([response(content="done"), response(content=NOTHING)])
+    v = screen_criterion(LLM(fake), PatientTools(conn, "P005"), STUDY.criteria[1], "screener")
+    assert not v.reasoning.startswith(ALL_NOTES_READ)
+
+
+def test_one_call_check_when_every_note_is_shown(conn, monkeypatch):
+    monkeypatch.setattr(config, "ONE_CALL_CHECKS", True)
+    fake = ScriptedClient([response(content=NOTHING)])
+    v = screen_criterion(LLM(fake), PatientTools(conn, "P005"), STUDY.criteria[1], "screener")
+    assert len(fake.requests) == 1 and "tools" not in fake.requests[0]
+    assert "Coded diagnoses for this patient" in fake.requests[0]["messages"][1]["content"]
+    assert v.verdict == VerdictValue.insufficient
+
+
+def test_tool_loop_when_notes_are_not_all_shown(conn, monkeypatch):
+    monkeypatch.setattr(config, "ONE_CALL_CHECKS", True)
+    monkeypatch.setattr(config, "NOTES_IN_PROMPT_CHARS", 0)
+    fake = ScriptedClient([response(content="done"), response(content=NOTHING)])
+    screen_criterion(LLM(fake), PatientTools(conn, "P005"), STUDY.criteria[1], "screener")
+    assert len(fake.requests) == 2

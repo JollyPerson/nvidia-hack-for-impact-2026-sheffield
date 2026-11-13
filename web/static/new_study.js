@@ -16,7 +16,16 @@
     ["ethics_reference", "Ethics reference (REC or IRAS)", "input", "", true],
     ["status", "Status", "select", "", true, [["recruiting", "Recruiting"], ["closed", "Closed"]]],
   ];
-  const STRUCT_FIELDS = [["age", "Age (years)"], ["curb65", "CURB-65 score"], ["news2", "NEWS2 score"], ["egfr", "eGFR (mL/min/1.73m²)"], ["crp", "CRP (mg/L)"], ["spo2", "SpO2 (%)"]];
+  // Must match src/prefilter.py FIELDS: the server rejects any other field.
+  const STRUCT_FIELDS = [["age", "Age (years)"], ["curb65", "CURB-65 score on admission"], ["news2", "NEWS2 score on admission"],
+    ["systolic_bp", "Systolic blood pressure (mmHg)"], ["egfr", "eGFR (mL/min/1.73m²)"], ["crp", "CRP (mg/L)"],
+    ["ntprobnp", "NT-proBNP (ng/L)"], ["creatinine", "Creatinine (µmol/L)"], ["urea", "Urea (mmol/L)"],
+    ["sodium", "Sodium (mmol/L)"], ["potassium", "Potassium (mmol/L)"], ["haemoglobin", "Haemoglobin (g/L)"],
+    ["wcc", "White cell count (10⁹/L)"], ["lactate", "Lactate (mmol/L)"], ["troponin", "Troponin T (ng/L)"],
+    ["glucose", "Glucose (mmol/L)"], ["primary_diagnosis", "Primary diagnosis (ICD-10 code starts with)"],
+    ["diagnosis_code", "Any diagnosis (ICD-10 code starts with)"], ["procedure_code", "Procedure (OPCS-4 code starts with)"],
+    ["admission_method", "Admission method (emergency or elective)"], ["admitted_within_hours", "Admitted within (hours)"],
+    ["currently_admitted", "Currently admitted (yes or no)"]];
   const OPS = [[">=", "at least (≥)"], ["<=", "at most (≤)"], [">", "more than (>)"], ["<", "less than (<)"], ["==", "equal to (=)"], ["!=", "not equal to (≠)"]];
 
   function field([name, label, kind, hint, required, options]) {
@@ -58,7 +67,7 @@
         <div class="nhsuk-form-group"><label class="nhsuk-label" for="c${n}-op">Rule</label>
           <select class="nhsuk-select" id="c${n}-op" data-k="operator">${opt(OPS, c.operator || ">=")}</select></div>
         <div class="nhsuk-form-group"><label class="nhsuk-label" for="c${n}-val">Value</label>
-          <input class="nhsuk-input nhsuk-input--width-5" id="c${n}-val" data-k="value" type="number" step="any" value="${A.esc(c.value ?? "")}"></div>
+          <input class="nhsuk-input nhsuk-input--width-5" id="c${n}-val" data-k="value" type="text" spellcheck="false" value="${A.esc(c.value ?? "")}"></div>
         <div class="nhsuk-form-group"><label class="nhsuk-label" for="c${n}-win">Within days (optional)</label>
           <input class="nhsuk-input nhsuk-input--width-4" id="c${n}-win" data-k="time_window_days" type="number" min="1" value="${A.esc(c.time_window_days ?? "")}"></div>
       </div>
@@ -78,7 +87,8 @@
       const c = { type: g("type"), kind: g("kind"), description: g("description").trim() };
       if (c.kind === "structured") {
         c.field = g("field"); c.operator = g("operator");
-        c.value = g("value") === "" ? null : Number(g("value"));
+        const v = g("value").trim();  // a number, or a code / word such as J18, emergency, yes
+        c.value = v === "" ? null : (isNaN(Number(v)) ? v : Number(v));
         c.time_window_days = g("time_window_days") === "" ? null : Number(g("time_window_days"));
       }
       return c;

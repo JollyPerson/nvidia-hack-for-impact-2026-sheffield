@@ -50,7 +50,8 @@ class RuleBasedClient:
     def _create(self, **kwargs):
         self.requests.append(kwargs)
         msgs = kwargs["messages"]
-        criterion = next(m["content"] for m in msgs if m["role"] == "user")
+        # First line only: the user message also carries the patient's notes.
+        criterion = next(m["content"] for m in msgs if m["role"] == "user").splitlines()[0]
         oxygen = "oxygen" in criterion.lower()
         tool_results = [json.loads(m["content"]) for m in msgs if m["role"] == "tool"]
 

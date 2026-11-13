@@ -15,7 +15,7 @@ export MODELS_DIR="$HOME/spark-hackathon/ollama-models"
 SCREENER=nemotron-3.5-lightning:30b
 VERIFIER=qwen3.6:35b-a3b
 
-mkdir -p "$ROOT/ui" "$ROOT/deploy"
+mkdir -p "$ROOT/ui" "$ROOT/deploy" "$ROOT/appdata"  # appdata: the web app's app.db, kept across deploys
 rsync -a --delete "$HERE/" "$ROOT/deploy/"
 if [[ -f "$SRC/app/app.py" || -f "$SRC/api/main.py" || -f "$SRC/Dockerfile" ]]; then
   rsync -a --delete --exclude .git --exclude __pycache__ --exclude 'data/*.db' "$SRC/" "$ROOT/ui/"

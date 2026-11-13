@@ -72,6 +72,8 @@ services:
     depends_on: [ollama]
     ports:
       - "${LANIP:?set LANIP}:8000:${WEB_PORT:-8000}"
+    volumes:
+      - ${APP_DATA_DIR:-/home/user1/trialmatch/appdata}:/srv/appdata
     environment:
       OPENAI_BASE_URL: http://ollama:11434/v1
       OPENAI_API_KEY: ollama
@@ -79,6 +81,18 @@ services:
       LLM_BASE_URL: http://ollama:11434/v1
       SCREENER_MODEL: nemotron-3.5-lightning:30b
       VERIFIER_MODEL: qwen3.6:35b-a3b
+      # Screening (see api/README.md): ADVOLARE_MOCK=true for canned results; cap on candidates per run (0 = all).
+      ADVOLARE_MOCK: ${ADVOLARE_MOCK:-}
+      APP_DB_PATH: /srv/appdata/app.db  # studies, runs, decisions and audit survive redeploys
+      ADVOLARE_MAX_CANDIDATES: ${ADVOLARE_MAX_CANDIDATES:-0}  # 0 = every prefilter candidate; dev-mode footer can change it
+      ADVOLARE_VERIFIER: ${ADVOLARE_VERIFIER:-off}  # demo: single model (screener only); dev-mode footer can turn stage 2 on
+      ADVOLARE_WORKERS: ${ADVOLARE_WORKERS:-4}            # patients screened at once (Ollama takes 8 requests)
+      STAGE1_STOP_ON_EXCLUSION: ${STAGE1_STOP_ON_EXCLUSION:-1}
+      # Model reasoning (thinking): off by default; on|off for both, or per role. Dev-mode footer can override.
+      LLM_REASONING: ${LLM_REASONING:-}
+      SCREENER_REASONING: ${SCREENER_REASONING:-}
+      VERIFIER_REASONING: ${VERIFIER_REASONING:-}
+      ONE_CALL_CHECKS: ${ONE_CALL_CHECKS:-1}  # 0 = tool loop for every check
       # Extras (see api/README.md). Empty = default. Set in deploy/features.env (committed) or ~/trialmatch/features.env (Spark only).
       ADVOLARE_DEV_MODE: ${ADVOLARE_DEV_MODE:-}
       FEATURES_ALL: ${FEATURES_ALL:-}
