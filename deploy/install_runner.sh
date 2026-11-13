@@ -9,7 +9,6 @@ set -euo pipefail
 REPO_URL="${REPO_URL:-https://github.com/JollyPerson/nvidia-hack-for-impact-2026-sheffield}"
 VERSION="${RUNNER_VERSION:-2.338.2}"
 DIR="$HOME/actions-runner"
-TOKEN="${REG_TOKEN:?REG_TOKEN not set}"
 
 mkdir -p "$DIR" && cd "$DIR"
 if [[ ! -x ./config.sh ]]; then
@@ -18,6 +17,7 @@ if [[ ! -x ./config.sh ]]; then
   tar xzf runner.tgz && rm runner.tgz
 fi
 if [[ ! -f .runner ]]; then
+  TOKEN="${REG_TOKEN:?REG_TOKEN not set (needed only for first registration)}"
   ./config.sh --unattended --replace --url "$REPO_URL" --token "$TOKEN" \
     --name spark1 --labels spark,trialmatch --work _work
 fi
@@ -30,7 +30,8 @@ After=network-online.target
 
 [Service]
 WorkingDirectory=$DIR
-ExecStart=$DIR/run.sh
+# sg: the user systemd manager may predate user1 joining the docker group, so ask for it explicitly.
+ExecStart=/usr/bin/sg docker -c $DIR/run.sh
 Restart=always
 RestartSec=5
 
@@ -38,7 +39,8 @@ RestartSec=5
 WantedBy=default.target
 EOF
 systemctl --user daemon-reload
-systemctl --user enable --now actions-runner.service
+systemctl --user enable actions-runner.service
+systemctl --user restart actions-runner.service
 # Keep user services running without an open login, and start them at boot.
 loginctl enable-linger "$USER" || echo "WARN: could not enable linger; runner stops when user1 logs out"
 loginctl show-user "$USER" -p Linger
