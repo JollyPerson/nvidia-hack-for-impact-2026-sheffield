@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Create a study - Advolare</title>
+  <link rel="stylesheet" href="/static/nhsuk/nhsuk-frontend.min.css">
+  <link rel="stylesheet" href="/static/advolare.css">
+  <link rel="icon" href="/static/nhsuk/assets/images/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script>document.body.className += ' js-enabled nhsuk-frontend-supported';</script>
+  <a class="nhsuk-skip-link" href="#maincontent">Skip to main content</a>
+  <header class="nhsuk-header" role="banner">
+    <div class="nhsuk-header__container nhsuk-width-container">
+      <div class="nhsuk-header__service">
+        <a class="nhsuk-header__service-name" href="/">Advolare - Clinical Trial Screening System</a>
+      </div>
+      <span class="adv-device">Runs on this device</span>
+    </div>
+    <nav class="nhsuk-header__navigation" aria-label="Menu">
+      <div class="nhsuk-header__navigation-container nhsuk-width-container">
+        <ul class="nhsuk-header__navigation-list">
+          <li class="nhsuk-header__navigation-item"><a class="nhsuk-header__navigation-link" href="/">Studies</a></li>
+          <li class="nhsuk-header__navigation-item nhsuk-header__navigation-item--current"><a class="nhsuk-header__navigation-link" href="/studies/new">Create a study</a></li>
+        </ul>
+      </div>
+    </nav>
+  </header>
+  <div class="nhsuk-width-container">
+    <nav class="nhsuk-breadcrumb" aria-label="Breadcrumb">
+      <ol class="nhsuk-breadcrumb__list"><li class="nhsuk-breadcrumb__list-item"><a class="nhsuk-breadcrumb__link" href="/">Studies</a></li></ol>
+      <a class="nhsuk-back-link" href="/"><span class="nhsuk-u-visually-hidden">Back to </span>Studies</a>
+    </nav>
+    <main class="nhsuk-main-wrapper" id="maincontent" role="main">
+      <div id="errors"></div>
+      <form id="study-form" novalidate>
+        <span class="nhsuk-caption-l">New study</span>
+        <h1>Create a study</h1>
+        <div class="nhsuk-grid-row"><div class="nhsuk-grid-column-two-thirds" id="details"></div></div>
+        <h2 class="nhsuk-heading-l">Eligibility criteria</h2>
+        <div class="nhsuk-grid-row adv-hidden" id="draft-helper"><div class="nhsuk-grid-column-two-thirds">
+          <div class="nhsuk-form-group">
+            <label class="nhsuk-label nhsuk-label--m" for="describe">Describe who you need (optional)</label>
+            <div class="nhsuk-hint" id="describe-hint">Write it as you would to a colleague. Advolare turns it into draft criteria below for you to check and change. Everything you type stays on this device.</div>
+            <textarea class="nhsuk-textarea" id="describe" rows="5" aria-describedby="describe-hint"></textarea>
+          </div>
+          <button class="nhsuk-button nhsuk-button--secondary" type="button" id="draft">Draft criteria from this description</button>
+          <div id="assumptions"></div>
+        </div></div>
+        <div id="criteria"></div>
+        <button class="nhsuk-button nhsuk-button--secondary" type="button" id="add-criterion">Add a criterion</button>
+        <div class="nhsuk-inset-text"><span class="nhsuk-u-visually-hidden">Information: </span>
+          <p>Saving the study does not start screening. You can run screening from the study page.</p></div>
+        <button class="nhsuk-button" type="submit">Save study</button>
+      </form>
+    </main>
+  </div>
+  <footer class="nhsuk-footer" role="contentinfo">
+    <div class="nhsuk-width-container">
+      <div id="adv-dev" class="adv-dev adv-hidden"></div>
+      <div class="nhsuk-footer__meta">
+        <h2 class="nhsuk-u-visually-hidden">About this service</h2>
+        <p class="nhsuk-body-s">Advolare runs entirely on an NVIDIA DGX Spark. No patient data leaves the device.
+          All patient data shown is synthetic. Advolare supports clinicians; it does not decide who is eligible.
+          Not an official NHS service.</p>
+      </div>
+    </div>
+  </footer>
+  <script src="/static/advolare.js"></script>
+  <script src="/static/new_study.js"></script>
+</body>
+</html>

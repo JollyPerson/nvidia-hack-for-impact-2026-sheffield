@@ -1,0 +1,91 @@
+# TrialMatch on the DGX Spark: our own Ollama, the Streamlit UI and (when present) the FastAPI web app.
+# The organiser's spark-hack-ollama container (127.0.0.1:11434) is separate and untouched.
+#
+#   cd ~/trialmatch/deploy && docker compose up -d --build
+#
+# LANIP must be the Spark's LAN address (deploy.sh sets it). All ports bind to it only.
+# Profiles (deploy.sh picks them from what the deployed source contains):
+#   streamlit -> app/app.py exists         -> http://spark1.local:8501
+#   web       -> a FastAPI Dockerfile exists -> http://spark1.local:8000
+name: trialmatch
+
+services:
+  ollama:
+    image: spark-hack-ollama:prepared   # organiser's prepared image, Ollama 0.40.16; never pulled
+    pull_policy: never
+    container_name: trialmatch-ollama
+    restart: unless-stopped
+    ports:
+      - "${LANIP:?set LANIP}:11434:11434"
+      # Also take localhost:11434 so code on the Spark that defaults to localhost uses this server.
+      # The organiser's spark-hack-ollama (which normally holds 127.0.0.1:11434) was stopped with the
+      # owner's approval on 2026-11-13 to stop duplicate model loads. To restore it: drop this line,
+      # redeploy, then `docker start spark-hack-ollama`.
+      - "127.0.0.1:11434:11434"
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_NUM_PARALLEL: "8"
+      OLLAMA_MAX_LOADED_MODELS: "2"      # screener (Lightning) + verifier (Qwen), per AGENTS.md
+      OLLAMA_KEEP_ALIVE: "-1"
+      OLLAMA_CONTEXT_LENGTH: "16384"
+      OLLAMA_NO_CLOUD: "1"
+      OLLAMA_NOPRUNE: "1"
+    volumes:
+      - ${MODELS_DIR:-/home/user1/spark-hackathon/ollama-models}:/root/.ollama/models:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+  ui:
+    profiles: [streamlit]
+    build:
+      context: .
+      dockerfile: ui.Dockerfile
+    image: trialmatch-ui:latest
+    container_name: trialmatch-ui
+    restart: unless-stopped
+    depends_on: [ollama]
+    ports:
+      - "${LANIP:?set LANIP}:8501:8501"
+    environment:
+      OPENAI_BASE_URL: http://ollama:11434/v1
+      OPENAI_API_KEY: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      SCREENER_MODEL: nemotron-3.5-lightning:30b
+      VERIFIER_MODEL: qwen3.6:35b-a3b
+    volumes:
+      - ${APP_DIR:-/home/user1/trialmatch/ui}:/srv/app
+
+  # FastAPI + NHS.UK frontend (AGENTS.md). Built from the app's own Dockerfile; expected to listen on 8000.
+  web:
+    profiles: [web]
+    build:
+      context: ${APP_DIR:-/home/user1/trialmatch/ui}
+      dockerfile: ${WEB_DOCKERFILE:-Dockerfile}
+    image: trialmatch-web:latest
+    container_name: trialmatch-web
+    restart: unless-stopped
+    depends_on: [ollama]
+    ports:
+      - "${LANIP:?set LANIP}:8000:${WEB_PORT:-8000}"
+    environment:
+      OPENAI_BASE_URL: http://ollama:11434/v1
+      OPENAI_API_KEY: ollama
+      OLLAMA_BASE_URL: http://ollama:11434
+      LLM_BASE_URL: http://ollama:11434/v1
+      SCREENER_MODEL: nemotron-3.5-lightning:30b
+      VERIFIER_MODEL: qwen3.6:35b-a3b
+      # Extras (see api/README.md). Empty = default. Set in deploy/features.env (committed) or ~/trialmatch/features.env (Spark only).
+      ADVOLARE_DEV_MODE: ${ADVOLARE_DEV_MODE:-}
+      FEATURES_ALL: ${FEATURES_ALL:-}
+      FEATURE_DO_NOT_CONTACT: ${FEATURE_DO_NOT_CONTACT:-}
+      FEATURE_DRAFT_CRITERIA: ${FEATURE_DRAFT_CRITERIA:-}
+      FEATURE_FAIRNESS: ${FEATURE_FAIRNESS:-}
+      FEATURE_WHAT_IF: ${FEATURE_WHAT_IF:-}
+      FEATURE_SCREENING_LOG: ${FEATURE_SCREENING_LOG:-}
+      FEATURE_INVITATION_LETTER: ${FEATURE_INVITATION_LETTER:-}
+      FEATURE_FHIR_EXPORT: ${FEATURE_FHIR_EXPORT:-}

@@ -1,0 +1,35 @@
+name: Deploy to DGX Spark
+
+# Runs on the self-hosted runner installed on spark1 (labels: self-hosted, spark).
+# Every push to master redeploys the UI (and the Ollama container if its config changed).
+# "Run workflow" in the Actions tab can deploy any branch, e.g. the UI branch before it is merged.
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch or commit to deploy
+        required: false
+        default: master
+
+concurrency:
+  group: spark-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, spark]
+    timeout-minutes: 20
+    steps:
+      # Deploy tooling always comes from the branch this workflow runs on.
+      - uses: actions/checkout@v4
+        with:
+          path: tooling
+      # App code comes from the chosen ref (the same branch on a push).
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.ref || github.sha }}
+          path: src
+      - name: Deploy
+        run: bash tooling/deploy/deploy.sh "$GITHUB_WORKSPACE/src"
