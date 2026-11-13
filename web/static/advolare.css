@@ -1,0 +1,35 @@
+/* Small additions on top of NHS.UK frontend. Colours are NHS palette values only. */
+:root { --nhs-blue:#005eb8; --nhs-dark-blue:#003087; --nhs-pale-blue:#ccdff1; --nhs-grey-1:#4c6272; --nhs-grey-3:#aeb7bd;
+        --nhs-grey-4:#d8dde0; --nhs-grey-5:#f0f4f5; --nhs-pale-yellow:#fff9c4; --nhs-warm-yellow:#ffb81c;
+        --nhs-red:#d5281b; --nhs-aqua:#00a499; --nhs-dark-aqua:#004a45; --nhs-white:#ffffff; }
+body { font-family: Arial, sans-serif; }
+.nhsuk-header__service-name { color: var(--nhs-white); font-weight: 700; }
+a.nhsuk-header__service-name { text-decoration: none; }
+a.nhsuk-header__service-name:hover { text-decoration: underline; }
+.adv-device { margin-left: auto; align-self: center; background: var(--nhs-white); color: var(--nhs-dark-aqua);
+              border: 1px solid var(--nhs-aqua); font-size: 16px; font-weight: 700; padding: 4px 8px; }
+.adv-funnel .row { margin-bottom: 16px; }
+.adv-funnel .lbl { display: flex; justify-content: space-between; font-size: 19px; }
+.adv-funnel .bar { height: 16px; background: var(--nhs-grey-5); }
+.adv-funnel .bar i { display: block; height: 16px; background: var(--nhs-blue); }
+.adv-quote mark { background: var(--nhs-pale-yellow); box-shadow: 0 2px 0 var(--nhs-warm-yellow); color: inherit; padding: 0 2px; }
+.adv-cite { font-size: 16px; color: var(--nhs-grey-1); margin: 8px 0 4px; }
+.adv-verdicts { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+@media (max-width: 640px) { .adv-verdicts { grid-template-columns: 1fr; } }
+.adv-criterion { border-left: 4px solid var(--nhs-grey-4); }
+.adv-criterion.flagged { border-left-color: var(--nhs-warm-yellow); }
+.adv-criterion.exclusion-met { border-left-color: var(--nhs-red); }
+.adv-row { margin-bottom: 16px; }
+.adv-row .nhsuk-form-group { margin-bottom: 16px; }
+.adv-row-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 24px; }
+.adv-structured { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr; gap: 0 16px; }
+@media (max-width: 768px) { .adv-row-grid, .adv-structured { grid-template-columns: 1fr; } }
+.adv-hidden { display: none !important; }
+.adv-patient-link { background: none; border: 0; padding: 0; color: var(--nhs-blue); text-decoration: underline;
+                    font: inherit; cursor: pointer; text-align: left; }
+.adv-patient-link:hover { color: #7c2855; }
+.adv-patient-link:focus { background: #ffeb3b; color: #212b32; box-shadow: 0 4px 0 #212b32; outline: none; }
+.nhsuk-task-list__name-and-hint .nhsuk-task-list__hint { white-space: normal; }
+.adv-patient-link { white-space: nowrap; }
+.nhsuk-task-list__status { white-space: nowrap; }
+.nhsuk-table-container { overflow-x: auto; }
