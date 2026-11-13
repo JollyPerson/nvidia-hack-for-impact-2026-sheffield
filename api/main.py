@@ -6,6 +6,7 @@ shapes as src/models.py
 """
 import asyncio
 import json
+import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -22,6 +23,8 @@ from src.models import Study
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
+# Seconds between mock pipeline steps when streaming progress (0 in tests). Goes when src.pipeline is wired in.
+MOCK_STEP_DELAY = float(os.environ.get("ADVOLARE_MOCK_STEP_DELAY", "0.8"))
 
 app = FastAPI(title="Advolare", description="Clinical Trial Screening System (synthetic data only)")
 app.mount("/static", StaticFiles(directory=WEB / "static"), name="static")
@@ -140,7 +143,7 @@ async def run_events(run_id: str):
     async def stream():
         for step in run.trace:
             yield f"event: step\ndata: {json.dumps({'step': step.step, 'state': 'running', 'name': step.name})}\n\n"
-            await asyncio.sleep(config.MOCK_STEP_DELAY)
+            await asyncio.sleep(MOCK_STEP_DELAY)
             yield f"event: step\ndata: {step.model_dump_json()}\n\n"
         run.status = "complete"
         store.log(run.study_id, f"Screening finished: {run.funnel.likely_eligible} likely eligible, "
