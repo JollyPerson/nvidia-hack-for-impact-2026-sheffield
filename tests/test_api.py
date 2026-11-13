@@ -140,7 +140,7 @@ def test_fhir_export_has_study_and_eligibility_group(all_features):
     study, group = (e["resource"] for e in bundle["entry"])
     assert study["resourceType"] == "ResearchStudy" and group["resourceType"] == "Group"
     assert study["recruitment"]["eligibility"]["reference"] == f"Group/{group['id']}"
-    assert len(group["characteristic"]) == 7
+    assert len(group["characteristic"]) == 9
     assert [c["exclude"] for c in group["characteristic"]].count(True) == 4
 
 
@@ -296,3 +296,14 @@ def test_dev_limit_overrides_env_until_reset(monkeypatch):
     client.delete("/api/dev/features")
     assert main.max_candidates() == 2
     assert client.post("/api/dev/limit", json={"patients": -1}).status_code == 422
+
+
+def test_demo_study_criteria_refresh_on_start(tmp_path):
+    """An app.db kept across deploys picks up changed demo criteria (PRISM-CAP gained C8/C9)."""
+    from data import seed_studies
+    db = tmp_path / "kept.db"
+    seed_studies.seed(db)
+    old = store.get_study("S-001", db=db)
+    store.replace_criteria("S-001", old.criteria[:3], db=db)
+    seed_studies.seed(db)
+    assert [c.id for c in store.get_study("S-001", db=db).criteria] == [c.id for c in old.criteria]

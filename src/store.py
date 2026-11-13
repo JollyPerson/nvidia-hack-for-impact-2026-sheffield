@@ -127,6 +127,19 @@ def create_study(study: Study, db: Path | str | None = None) -> Study:
         return _study_from_row(conn, row)
 
 
+def replace_criteria(study_id: str, criteria: list[Criterion], db: Path | str | None = None) -> None:
+    """Replace a study's criteria (used to refresh the demo studies). Criteria must have ids."""
+    with _connect(db) as conn:
+        conn.execute("DELETE FROM Criteria WHERE study_id = ?", (study_id,))
+        for position, criterion in enumerate(criteria):
+            crit = criterion.model_dump(mode="json")
+            conn.execute(
+                "INSERT INTO Criteria (study_id, position, "
+                f"{', '.join(CRITERION_COLUMNS)}) VALUES (?, ?, {', '.join('?' * len(CRITERION_COLUMNS))})",
+                [study_id, position] + [crit[c] for c in CRITERION_COLUMNS],
+            )
+
+
 def _next_study_id(conn: sqlite3.Connection) -> str:
     numbers = [int(m.group(1)) for (sid,) in conn.execute("SELECT id FROM Studies")
                if (m := re.fullmatch(r"S-(\d+)", sid))]

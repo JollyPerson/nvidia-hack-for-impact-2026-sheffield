@@ -282,6 +282,13 @@
       ${crit}
       <div class="nhsuk-grid-row"><div class="nhsuk-grid-column-two-thirds">${decisionForm}${contactHtml}</div></div>`;
   }
+  function patientError(mrn, e) {
+    // Say why instead of doing nothing, e.g. the results on screen are from a run the server no longer has.
+    const box = $("patient-error") || Object.assign(document.createElement("div"), { id: "patient-error" });
+    box.innerHTML = A.warning(`Could not open ${mrn}`, `<p>${A.esc(e.message || e)}.</p>
+      <p>The results on this page may be out of date. <a href="${location.pathname}">Reload the page</a> to see the latest run.</p>`);
+    $("results").prepend(box); box.scrollIntoView({ block: "center" });
+  }
   async function showPatient(mrn, push = true) {
     const sec = $("patient");
     if (!mrn) {
@@ -294,9 +301,11 @@
     try {
       p = await A.api(`/api/studies/${enc}/patients/${m}`);
       if (p.decision === "approved") contact = await A.api(`/api/studies/${enc}/patients/${m}/contact`);
-    } catch (e) { return; }
+    } catch (e) { return patientError(mrn, e); }
+    let html;
+    try { html = patientHtml(p, contact); } catch (e) { console.error(e); return patientError(mrn, e); }
     ["study", "screening", "results", "audit"].forEach(id => $(id).classList.add("adv-hidden"));
-    sec.innerHTML = patientHtml(p, contact);
+    sec.innerHTML = html;
     if (push) history.pushState({ mrn }, "", `${location.pathname}?patient=${m}`);
     window.scrollTo(0, 0); sec.focus();
     $("back").addEventListener("click", e => { e.preventDefault(); showPatient(null); $("results").scrollIntoView(); });

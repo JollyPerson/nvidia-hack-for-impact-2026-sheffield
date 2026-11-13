@@ -45,6 +45,11 @@ PNEUMONIA = Study(
           field="age", operator=">=", value=16),
         C(id="C2", type="inclusion", kind="structured", description="CURB-65 score of 2 or more on admission",
           field="curb65", operator=">=", value=2),
+        # C8, C9: the pneumonia admission itself, so the models only read the notes of current CAP inpatients.
+        C(id="C8", type="inclusion", kind="structured", description="Currently admitted to hospital",
+          field="currently_admitted", operator="==", value=True),
+        C(id="C9", type="inclusion", kind="structured", description="Primary diagnosis of pneumonia (ICD-10 J18)",
+          field="primary_diagnosis", operator="==", value="J18"),
         C(id="C3", type="inclusion", kind="notes",
           description="Clinical and radiological diagnosis of community-acquired pneumonia within the last 24 hours"),
         C(id="C4", type="exclusion", kind="structured", description="eGFR below 30 in the last 90 days",
@@ -102,7 +107,10 @@ def seed(db: Path, reset: bool = False) -> list[str]:
     store.init_db(db)
     added = []
     for study in DEMO_STUDIES:
-        if store.get_study(study.id, db=db) is None:
+        existing = store.get_study(study.id, db=db)
+        if existing is not None and existing.criteria != study.criteria:
+            store.replace_criteria(study.id, study.criteria, db=db)  # demo criteria changed since last start
+        if existing is None:
             store.create_study(study, db=db)
             store.append_audit(
                 AuditEntry(when=datetime.now(), study_id=study.id, who="seed script",
