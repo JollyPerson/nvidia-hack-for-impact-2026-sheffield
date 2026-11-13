@@ -46,10 +46,11 @@ Flags are read on every request, so a restart picks up a change; no rebuild is n
 | Setting | Default | What it does |
 |---|---|---|
 | `ADVOLARE_MOCK` | `false` | `true` uses the canned results in `mock_data.py` (no warehouse or model server needed) |
-| `ADVOLARE_MAX_CANDIDATES` | `5` (`2` on the Spark) | Screen at most this many prefilter candidates per run, most recently admitted first. Each costs about 2 model calls per notes criterion. `0` = all |
+| `ADVOLARE_MAX_CANDIDATES` | `5` (`0` = all on the Spark) | Screen at most this many prefilter candidates per run, most recently admitted first. Each costs about 2 model calls per notes criterion. `0` = all |
 | `ADVOLARE_WORKERS` | `2` | Patients screened at once (threads; each opens its own read-only warehouse connection) |
 | `ADVOLARE_CRITERIA_WORKERS` | `4` | Criteria checked at once per patient, in each stage. Keep `ADVOLARE_WORKERS` x this within the Spark's `OLLAMA_NUM_PARALLEL` (8) |
 | `ONE_CALL_CHECKS` | `1` | When all of a patient's notes fit in the prompt, check each criterion in one model call (notes + coded diagnoses, no tool loop). `0` = tool loop |
+| `ADVOLARE_VERIFIER` | `on` (`off` on the Spark) | `off` = single-model mode: the screener alone, no stage 2. Dev-mode footer: "Stage 2 verifier" |
 | `LLM_REASONING` / `SCREENER_REASONING` / `VERIFIER_REASONING` | `off` | `on` lets that model think (no `reasoning_effort` sent, up to `REASONING_MAX_OUTPUT_TOKENS`=4096 output tokens). Off always sends `reasoning_effort: "none"`. The developer-mode footer has a toggle per model |
 | `ADVOLARE_MOCK_STEP_DELAY` | `0.8` | Seconds between mock progress steps |
 | `APP_DB_PATH` | `data/app.db` | App database (`src/store.py`). Created and seeded with the demo studies on start-up |

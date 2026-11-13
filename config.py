@@ -47,6 +47,9 @@ REASONING = {
 }
 # Thinking uses output tokens before the answer, so allow more when it is on (Qwen came back
 # empty at 300 tokens). The prompt budget shrinks to match (8,192 total per request).
+# Stage 2 (the verifier model). ADVOLARE_VERIFIER=off screens with the screener model alone (single-model
+# mode); the web app's developer mode can override it (src/llm.py STAGE_OVERRIDES).
+VERIFIER_ENABLED = os.getenv("ADVOLARE_VERIFIER", "on").strip().lower() not in {"off", "false", "0", "no"}
 REASONING_MAX_OUTPUT_TOKENS = int(os.getenv("REASONING_MAX_OUTPUT_TOKENS", "4096"))
 
 # --- Token budget (organiser hard limit: 8,192 tokens per request) -------------

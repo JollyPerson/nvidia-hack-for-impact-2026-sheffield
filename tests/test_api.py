@@ -307,3 +307,14 @@ def test_demo_study_criteria_refresh_on_start(tmp_path):
     store.replace_criteria("S-001", old.criteria[:3], db=db)
     seed_studies.seed(db)
     assert [c.id for c in store.get_study("S-001", db=db).criteria] == [c.id for c in old.criteria]
+
+
+def test_dev_verifier_toggle(monkeypatch):
+    from src import llm as llm_mod
+    monkeypatch.setattr(llm_mod, "STAGE_OVERRIDES", {})
+    monkeypatch.setattr(main.config, "VERIFIER_ENABLED", True)
+    assert client.get("/api/dev/verifier").json()["enabled"] is True
+    assert client.post("/api/dev/verifier", json={"enabled": False}).json()["enabled"] is False
+    assert client.get("/api/health").json()["verifier"] is False
+    client.delete("/api/dev/features")
+    assert client.get("/api/dev/verifier").json()["enabled"] is True

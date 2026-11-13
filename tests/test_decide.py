@@ -120,3 +120,14 @@ def test_silence_never_satisfies_an_inclusion():
     r = result()
     r.assessments[1] = CriterionAssessment(criterion_id="C2", stage1=silent(), stage2=silent())
     assert decide(STUDY, r).status == FinalStatus.needs_review
+
+
+def test_single_model_silence_counts_with_one_stage():
+    r = result()
+    r.assessments[2] = CriterionAssessment(criterion_id="C3", stage1=silent(), stage2=None)
+    assert decide(STUDY, r).status == FinalStatus.needs_review  # two-model mode needs both
+    r = result()
+    r.assessments[2] = CriterionAssessment(criterion_id="C3", stage1=silent(), stage2=None)
+    r = decide(STUDY, r, single_model=True)
+    assert r.status == FinalStatus.likely_eligible
+    assert any("the model read every note" in x for x in r.reasons)

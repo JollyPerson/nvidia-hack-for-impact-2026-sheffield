@@ -61,6 +61,12 @@ TRUNCATED = " …[truncated]"
 
 # Developer-mode overrides of config.REASONING, per role (set by the web app; lost on restart).
 REASONING_OVERRIDES: dict[str, bool] = {}
+STAGE_OVERRIDES: dict[str, bool] = {}  # developer mode: {"verifier": False} = single-model mode
+
+
+def verifier_on() -> bool:
+    """Whether stage 2 (the verifier model) runs. ADVOLARE_VERIFIER, or a developer-mode override."""
+    return STAGE_OVERRIDES.get("verifier", config.VERIFIER_ENABLED)
 
 
 def reasoning_on(role: str) -> bool:

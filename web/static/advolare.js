@@ -14,8 +14,8 @@ const A = {
   async devPanel() {
     const box = document.getElementById("adv-dev");
     if (!box) return;
-    let rows, models, limit;
-    try { [rows, models, limit] = await Promise.all([A.api("/api/dev/features"), A.api("/api/dev/models"), A.api("/api/dev/limit")]); }
+    let rows, models, limit, verifier;
+    try { [rows, models, limit, verifier] = await Promise.all([A.api("/api/dev/features"), A.api("/api/dev/models"), A.api("/api/dev/limit"), A.api("/api/dev/verifier")]); }
     catch (e) { return; } // 404 = developer mode is off
     box.classList.remove("adv-hidden");
     box.innerHTML = `<div class="nhsuk-form-group"><fieldset class="nhsuk-fieldset" aria-describedby="adv-dev-hint">
@@ -33,6 +33,13 @@ const A = {
         <input class="nhsuk-checkboxes__input" id="dev-reason-${m.role}" type="checkbox" data-role="${m.role}"${m.reasoning ? " checked" : ""} aria-describedby="dev-reason-${m.role}-hint">
         <label class="nhsuk-label nhsuk-checkboxes__label" for="dev-reason-${m.role}">${m.role === "screener" ? "Screener" : "Verifier"} reasoning</label>
         <div class="nhsuk-hint nhsuk-checkboxes__hint" id="dev-reason-${m.role}-hint">${A.esc(m.model)}, up to ${m.max_output_tokens} output tokens. Set by ${A.esc(m.source)}.</div></div>`).join("")}</div>
+      </fieldset></div>
+      <div class="nhsuk-form-group"><fieldset class="nhsuk-fieldset">
+      <legend class="nhsuk-fieldset__legend nhsuk-fieldset__legend--s">Stages</legend>
+      <div class="nhsuk-checkboxes"><div class="nhsuk-checkboxes__item">
+        <input class="nhsuk-checkboxes__input" id="dev-verifier" type="checkbox"${verifier.enabled ? " checked" : ""} aria-describedby="dev-verifier-hint">
+        <label class="nhsuk-label nhsuk-checkboxes__label" for="dev-verifier">Stage 2 verifier</label>
+        <div class="nhsuk-hint nhsuk-checkboxes__hint" id="dev-verifier-hint">${A.esc(verifier.model)} re-checks shortlisted patients. Untick for single-model mode (screener only, faster). Set by ${A.esc(verifier.source)}.</div></div></div>
       </fieldset></div>
       <div class="nhsuk-form-group">
         <label class="nhsuk-label nhsuk-label--s" for="dev-limit">Patients screened per run</label>
@@ -52,6 +59,10 @@ const A = {
       await A.api("/api/dev/models", { method: "POST", body: JSON.stringify({ role: cb.dataset.role, reasoning: cb.checked }) });
       A.devPanel();
     }));
+    document.getElementById("dev-verifier").addEventListener("change", async e => {
+      await A.api("/api/dev/verifier", { method: "POST", body: JSON.stringify({ enabled: e.target.checked }) });
+      A.devPanel();
+    });
     document.getElementById("dev-limit").addEventListener("change", async e => {
       const n = parseInt(e.target.value, 10);
       if (Number.isInteger(n) && n >= 0) await A.api("/api/dev/limit", { method: "POST", body: JSON.stringify({ patients: n }) });

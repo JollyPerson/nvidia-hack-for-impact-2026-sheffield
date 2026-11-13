@@ -50,9 +50,9 @@ def _agreed(a: CriterionAssessment | None, value: VerdictValue) -> bool:
     return bool(verdicts) and all(v == value for v in verdicts)
 
 
-def _not_mentioned(a: CriterionAssessment) -> bool:
-    """Both models read every note and found nothing: the notes never mention it."""
-    stages = [a.stage1, a.stage2]
+def _not_mentioned(a: CriterionAssessment, single_model: bool = False) -> bool:
+    """Both models (or, in single-model mode, the one model) read every note and found nothing."""
+    stages = [a.stage1] if single_model and a.stage2 is None else [a.stage1, a.stage2]
     return all(v is not None and v.verdict == VerdictValue.insufficient and not v.citations
                and v.reasoning.startswith(ALL_NOTES_READ) for v in stages) and not a.flags
 
@@ -61,8 +61,11 @@ def _citations_ok(a: CriterionAssessment) -> bool:
     return not any(f.type == FlagType.citation_failed for f in a.flags)
 
 
-def decide(study: Study, result: PatientResult) -> PatientResult:
-    """Set `result.status` and add the reasons for it. Returns the same object."""
+def decide(study: Study, result: PatientResult, single_model: bool = False) -> PatientResult:
+    """Set `result.status` and add the reasons for it. Returns the same object.
+
+    single_model=True: stage 2 was switched off (ADVOLARE_VERIFIER=off), so the screener's verdict alone
+    can count an exclusion as not mentioned in the notes."""
     by_id = {a.criterion_id: a for a in result.assessments}
     excluded_by: list[str] = []
     review: list[str] = []
@@ -78,7 +81,7 @@ def decide(study: Study, result: PatientResult) -> PatientResult:
                 continue  # structured exclusion: passed in SQL
             if _agreed(a, VerdictValue.met) and _citations_ok(a):
                 excluded_by.append(c.description)
-            elif c.kind == CriterionKind.notes and _not_mentioned(a):
+            elif c.kind == CriterionKind.notes and _not_mentioned(a, single_model):
                 not_mentioned.append(c.description)
             elif not _agreed(a, VerdictValue.not_met):
                 review.append(_why_review(c, a))
@@ -100,7 +103,8 @@ def decide(study: Study, result: PatientResult) -> PatientResult:
         result.status = FinalStatus.likely_eligible
         result.reasons.append(f"All {len(study.criteria)} criteria checked: every inclusion met, no exclusion met")
     if result.status != FinalStatus.excluded:
-        result.reasons += [f"Not mentioned in the notes (both models read every note): {d}" for d in not_mentioned]
+        who = "the model read every note" if single_model else "both models read every note"
+        result.reasons += [f"Not mentioned in the notes ({who}): {d}" for d in not_mentioned]
     return result
 
 

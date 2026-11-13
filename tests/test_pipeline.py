@@ -88,3 +88,15 @@ def test_patients_and_criteria_in_parallel(tmp_path, monkeypatch):
     one = run_screening(STUDY, LLM(RuleBasedClient()))
     many = run_screening(STUDY, LLM(RuleBasedClient()), workers=2, criteria_workers=4)
     assert [p.model_dump() for p in many.patients] == [p.model_dump() for p in one.patients]
+
+
+def test_single_model_mode_skips_stage_2(monkeypatch):
+    from src import llm as llm_mod
+    monkeypatch.setattr(llm_mod, "STAGE_OVERRIDES", {"verifier": False})
+    steps = []
+    run = run_screening(STUDY, LLM(RuleBasedClient()), build_db(), on_step=steps.append)
+    assert all(a.stage2 is None for r in run.patients for a in r.assessments)
+    assert not any(f.type == "stage_disagreement" for r in run.patients for a in r.assessments for f in a.flags)
+    by_id = {r.patient_id: r.status.value for r in run.patients}
+    assert by_id["P001"] == "likely_eligible" and by_id["P002"] == "excluded"
+    assert any(s["step"] == 3 and s["state"] == "done" and "single-model" in s["detail"] for s in steps)

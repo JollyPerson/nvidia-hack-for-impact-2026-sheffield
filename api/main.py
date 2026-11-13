@@ -492,7 +492,33 @@ def dev_reset():
     features.clear_overrides()
     llm_mod.REASONING_OVERRIDES.clear()
     LIMIT_OVERRIDE.clear()
+    llm_mod.STAGE_OVERRIDES.clear()
     return features.describe()
+
+
+class VerifierToggle(BaseModel):
+    enabled: bool | None  # None = back to ADVOLARE_VERIFIER
+
+
+def _verifier():
+    return {"enabled": llm_mod.verifier_on(), "model": config.VERIFIER_MODEL,
+            "source": "developer mode" if "verifier" in llm_mod.STAGE_OVERRIDES else "ADVOLARE_VERIFIER (default on)"}
+
+
+@app.get("/api/dev/verifier", dependencies=[Depends(features.require_dev_mode)])
+def dev_verifier():
+    """Developer mode: whether stage 2 (the verifier model) runs. Off = single-model mode."""
+    return _verifier()
+
+
+@app.post("/api/dev/verifier", dependencies=[Depends(features.require_dev_mode)])
+def dev_set_verifier(body: VerifierToggle):
+    if body.enabled is None:
+        llm_mod.STAGE_OVERRIDES.pop("verifier", None)
+    else:
+        llm_mod.STAGE_OVERRIDES["verifier"] = body.enabled
+    _log("", f"Developer mode: stage 2 verifier {'on' if llm_mod.verifier_on() else 'off (single model)'}", who="Developer")
+    return _verifier()
 
 
 class LimitSetting(BaseModel):
@@ -555,7 +581,8 @@ def dev_toggle_reasoning(body: ReasoningToggle):
 @app.get("/api/health")
 def health():
     return {"ok": True, "screener": config.SCREENER_MODEL, "verifier": config.VERIFIER_MODEL,
-            "reasoning": {m["role"]: m["reasoning"] for m in _models()}}
+            "reasoning": {m["role"]: m["reasoning"] for m in _models()}, "verifier": llm_mod.verifier_on(),
+            "max_candidates": max_candidates() or 0}
 
 
 # ---------- Pages ----------

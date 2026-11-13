@@ -19,7 +19,7 @@ from typing import Callable
 
 import config
 from src.decide import decide
-from src.llm import LLM, reasoning_on
+from src.llm import LLM, reasoning_on, verifier_on
 from src.models import CriterionAssessment, FinalStatus, PatientResult, ScreeningRun, Study, Verdict, VerdictValue
 from src.prefilter import connect_readonly, run_prefilter
 from src.screening import screen_patient
@@ -164,7 +164,7 @@ def _screen_all(llm, conn, study, patient_ids, workers, audit, emit, n_notes,
                 emit(_step(2, "running", f"Screened {done} of {len(patient_ids)} patients ({workers} at a time).",
                            model=config.SCREENER_MODEL))
                 shortlisted = sum(r.shortlisted for r in results.values())
-                if shortlisted:
+                if shortlisted and verifier_on():
                     emit(_step(3, "running", f"Re-checked {shortlisted} shortlisted patients so far.",
                                model=config.VERIFIER_MODEL))
     finally:
@@ -211,6 +211,7 @@ def run_screening(
 
         # 2 and 3. Stage 1 screener, then stage 2 verifier, for several patients at once
         timed = _TimedLLM(llm or LLM())
+        single = not verifier_on()
         n_notes = sum(c.kind == "notes" for c in study.criteria)
         workers = max(1, min(workers, len(candidates))) if own_conn else 1  # a given connection stays on this thread
         criteria_workers = criteria_workers if own_conn else 1
@@ -230,10 +231,14 @@ def run_screening(
                               f"Reasoning {'on' if reasoning_on('screener') else 'off'}."
                               + (f" {errors} model calls failed and count as insufficient." if errors else ""),
                    wall * timed.seconds["screener"] / total, config.SCREENER_MODEL))
-        emit(_step(3, "done", f"Independently re-read the records of the {run.shortlisted_stage1} shortlisted "
-                              f"patients. Stages 1 and 2 took {wall:.0f}s together. "
-                              f"Reasoning {'on' if reasoning_on('verifier') else 'off'}.",
-                   wall * timed.seconds["verifier"] / total, config.VERIFIER_MODEL))
+        if single:
+            emit(_step(3, "done", "Skipped: single-model mode (ADVOLARE_VERIFIER=off). The screener's verdicts "
+                                  "are checked by validation and decided by code without a second model.", 0.0))
+        else:
+            emit(_step(3, "done", f"Independently re-read the records of the {run.shortlisted_stage1} shortlisted "
+                                  f"patients. Stages 1 and 2 took {wall:.0f}s together. "
+                                  f"Reasoning {'on' if reasoning_on('verifier') else 'off'}.",
+                       wall * timed.seconds["verifier"] / total, config.VERIFIER_MODEL))
 
         # 4. Validation: model citations only (code-made citations come from the warehouse itself)
         emit(_step(4, "running", "Checking every quote against the cited record."))
@@ -253,7 +258,7 @@ def run_screening(
         for r in results:
             r.assessments = sorted(r.assessments + _code_assessments(study, citations[r.patient_id]),
                                    key=lambda a: order.get(a.criterion_id, 99))
-            decide(study, r)
+            decide(study, r, single_model=single)
         counts = Counter(r.status for r in results)
         run.confirmed_stage2 = sum(r.shortlisted and r.status != FinalStatus.excluded for r in results)
         run.likely_eligible = counts[FinalStatus.likely_eligible]

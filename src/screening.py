@@ -28,7 +28,7 @@ from datetime import date
 import openai
 
 import config
-from src.llm import LLM, NOTHING_FOUND, PromptTooLong, max_output_tokens
+from src.llm import LLM, NOTHING_FOUND, PromptTooLong, max_output_tokens, verifier_on
 from src.models import (
     Citation,
     Criterion,
@@ -306,8 +306,8 @@ def screen_patient(
                     break
     result.shortlisted = not result.reasons
 
-    # Stage 2: verifier, only for shortlisted patients
-    if result.shortlisted:
+    # Stage 2: verifier, only for shortlisted patients (and not in single-model mode)
+    if result.shortlisted and verifier_on():
         def verify(i, c):
             a = assessments[_criterion_id(c, i)]
             pointers = a.stage1.citations if a.stage1 else []

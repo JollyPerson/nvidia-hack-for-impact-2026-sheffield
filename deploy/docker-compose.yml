@@ -84,7 +84,8 @@ services:
       # Screening (see api/README.md): ADVOLARE_MOCK=true for canned results; cap on candidates per run (0 = all).
       ADVOLARE_MOCK: ${ADVOLARE_MOCK:-}
       APP_DB_PATH: /srv/appdata/app.db  # studies, runs, decisions and audit survive redeploys
-      ADVOLARE_MAX_CANDIDATES: ${ADVOLARE_MAX_CANDIDATES:-2}  # live demo cap; dev-mode footer can change it
+      ADVOLARE_MAX_CANDIDATES: ${ADVOLARE_MAX_CANDIDATES:-0}  # 0 = every prefilter candidate; dev-mode footer can change it
+      ADVOLARE_VERIFIER: ${ADVOLARE_VERIFIER:-off}  # demo: single model (screener only); dev-mode footer can turn stage 2 on
       ADVOLARE_WORKERS: ${ADVOLARE_WORKERS:-4}            # patients screened at once (Ollama takes 8 requests)
       STAGE1_STOP_ON_EXCLUSION: ${STAGE1_STOP_ON_EXCLUSION:-1}
       # Model reasoning (thinking): off by default; on|off for both, or per role. Dev-mode footer can override.
