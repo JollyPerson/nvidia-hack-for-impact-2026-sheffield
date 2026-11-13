@@ -5,7 +5,7 @@ name: Deploy to DGX Spark
 # "Run workflow" in the Actions tab can deploy any branch, e.g. the UI branch before it is merged.
 on:
   push:
-    branches: [master, claude/project-thread-4mtfwk]  # TEMP: test trigger
+    branches: [master]
   workflow_dispatch:
     inputs:
       ref:
