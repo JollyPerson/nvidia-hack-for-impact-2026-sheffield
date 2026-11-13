@@ -1,3 +1,4 @@
+A.features().then(() => A.devPanel());
 (async function () {
   const el = document.getElementById("studies");
   try {

@@ -6,6 +6,7 @@ os.environ["ADVOLARE_MOCK_STEP_DELAY"] = "0"
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
+from api import features  # noqa: E402
 from api.main import app, store  # noqa: E402
 
 client = TestClient(app)
@@ -23,8 +24,16 @@ NEW_STUDY = {
 
 
 @pytest.fixture(autouse=True)
-def fresh_store():
+def fresh_store(monkeypatch):
     store.reset()
+    features.clear_overrides()
+    for name in ["FEATURES_ALL", "ADVOLARE_DEV_MODE", *(f"FEATURE_{n.upper()}" for n in features.FEATURES)]:
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture
+def all_features(monkeypatch):
+    monkeypatch.setenv("FEATURES_ALL", "true")
 
 
 def run_screening(study_id="S-001"):
@@ -117,7 +126,7 @@ def test_unknown_study_and_patient():
     assert client.get("/api/studies/S-001/patients/MRN-000000").status_code == 404
 
 
-def test_fhir_export_has_study_and_eligibility_group():
+def test_fhir_export_has_study_and_eligibility_group(all_features):
     bundle = client.get("/api/studies/S-001/fhir").json()
     study, group = (e["resource"] for e in bundle["entry"])
     assert study["resourceType"] == "ResearchStudy" and group["resourceType"] == "Group"
@@ -126,14 +135,14 @@ def test_fhir_export_has_study_and_eligibility_group():
     assert [c["exclude"] for c in group["characteristic"]].count(True) == 4
 
 
-def test_what_if_reuses_verdicts():
+def test_what_if_reuses_verdicts(all_features):
     run_screening()
     rows = {r["criterion_id"]: r for r in client.get("/api/studies/S-001/what-if").json()}
     assert rows["C5"]["likely_eligible_without"] > rows["C5"]["likely_eligible_now"]  # negation trap + home O2
     assert rows["C2"]["extra_candidates_to_screen"] > 0
 
 
-def test_fairness_and_screening_log():
+def test_fairness_and_screening_log(all_features):
     run_screening()
     fair = client.get("/api/studies/S-001/fairness").json()
     assert fair["shortlist_size"] == 6 and fair["flags"]
@@ -142,10 +151,100 @@ def test_fairness_and_screening_log():
     assert "07700" not in log.text
 
 
-def test_letter_only_after_approval():
+def test_letter_only_after_approval(all_features):
     run_screening()
     url = "/api/studies/S-001/patients/MRN-100231"
     assert client.get(url + "/letter").status_code == 403
     client.post(url + "/decision", json={"decision": "approved"})
     text = client.get(url + "/letter").json()["text"]
     assert text.startswith("Dear Margaret") and "pneumonia" not in text.lower()
+
+
+# ---------- Feature flags ----------
+EXTRA_ROUTES = {
+    "fairness": "/api/studies/S-001/fairness",
+    "what_if": "/api/studies/S-001/what-if",
+    "screening_log": "/api/studies/S-001/screening-log.csv",
+    "fhir_export": "/api/studies/S-001/fhir",
+}
+
+
+def test_default_flags():
+    assert client.get("/api/features").json() == {
+        "do_not_contact": True, "draft_criteria": True, "fairness": False, "what_if": False,
+        "screening_log": False, "invitation_letter": False, "fhir_export": False}
+
+
+@pytest.mark.parametrize("name,url", EXTRA_ROUTES.items())
+def test_extra_routes_404_when_off_and_200_when_on(monkeypatch, name, url):
+    run_screening()
+    assert client.get(url).status_code == 404
+    monkeypatch.setenv(f"FEATURE_{name.upper()}", "true")
+    assert client.get(url).status_code == 200
+
+
+def test_one_flag_overrides_features_all(monkeypatch):
+    monkeypatch.setenv("FEATURES_ALL", "true")
+    monkeypatch.setenv("FEATURE_FAIRNESS", "false")
+    flags = client.get("/api/features").json()
+    assert flags["what_if"] and not flags["fairness"]
+    monkeypatch.setenv("FEATURES_ALL", "false")
+    assert not any(client.get("/api/features").json().values())
+
+
+def test_empty_or_unknown_values_keep_the_default(monkeypatch):
+    monkeypatch.setenv("FEATURE_DO_NOT_CONTACT", "")
+    monkeypatch.setenv("FEATURE_FAIRNESS", "maybe")
+    flags = client.get("/api/features").json()
+    assert flags["do_not_contact"] and not flags["fairness"]
+
+
+def test_letter_off_even_after_approval(monkeypatch):
+    run_screening()
+    url = "/api/studies/S-001/patients/MRN-100231"
+    client.post(url + "/decision", json={"decision": "approved"})
+    assert client.get(url + "/letter").status_code == 404
+    assert client.get(url + "/contact").status_code == 200  # contact after approval is core, never switched off
+
+
+def test_draft_criteria_can_be_switched_off(monkeypatch):
+    monkeypatch.setenv("FEATURE_DRAFT_CRITERIA", "false")
+    assert client.post("/api/criteria/draft", json={"text": "adults"}).status_code == 404
+    assert client.get("/api/criteria/example").status_code == 404
+
+
+def test_do_not_contact_flag_controls_funnel(monkeypatch):
+    run_screening()
+    assert client.get("/api/studies/S-001/results").json()["funnel"]["removed_before_screening"]
+    monkeypatch.setenv("FEATURE_DO_NOT_CONTACT", "false")
+    run_screening()
+    assert client.get("/api/studies/S-001/results").json()["funnel"]["removed_before_screening"] == []
+
+
+# ---------- Developer mode toggles ----------
+def test_dev_toggle_overrides_env_and_resets(monkeypatch):
+    run_screening()
+    assert client.get("/api/studies/S-001/fairness").status_code == 404
+    rows = client.post("/api/dev/features", json={"name": "fairness", "enabled": True}).json()
+    assert {r["name"]: r["source"] for r in rows}["fairness"] == "developer toggle"
+    assert client.get("/api/features").json()["fairness"] is True
+    assert client.get("/api/studies/S-001/fairness").status_code == 200
+    monkeypatch.setenv("FEATURE_FAIRNESS", "false")  # toggle still wins over the env flag
+    assert client.get("/api/studies/S-001/fairness").status_code == 200
+    client.post("/api/dev/features", json={"name": "fairness", "enabled": None})
+    assert client.get("/api/studies/S-001/fairness").status_code == 404
+    client.post("/api/dev/features", json={"name": "fhir_export", "enabled": True})
+    client.delete("/api/dev/features")
+    assert client.get("/api/features").json()["fhir_export"] is False
+
+
+def test_dev_toggle_rejects_unknown_feature():
+    assert client.post("/api/dev/features", json={"name": "nope", "enabled": True}).status_code == 422
+
+
+def test_dev_mode_off_hides_toggles_and_ignores_overrides(monkeypatch):
+    client.post("/api/dev/features", json={"name": "what_if", "enabled": True})
+    monkeypatch.setenv("ADVOLARE_DEV_MODE", "false")
+    assert client.get("/api/dev/features").status_code == 404
+    assert client.post("/api/dev/features", json={"name": "what_if", "enabled": True}).status_code == 404
+    assert client.get("/api/features").json()["what_if"] is False

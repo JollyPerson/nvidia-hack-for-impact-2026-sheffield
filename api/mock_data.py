@@ -191,8 +191,10 @@ def patients_for(study: Study):
 
 def funnel_for(patients):
     statuses = [p.result.status for p in patients]
+    from api import features
     from api.extras import DO_NOT_CONTACT
-    return Funnel(removed_before_screening=[{"reason": r, "count": n} for r, n in DO_NOT_CONTACT],
+    removed = [{"reason": r, "count": n} for r, n in DO_NOT_CONTACT] if features.enabled("do_not_contact") else []
+    return Funnel(removed_before_screening=removed,
                   candidates_after_sql=len(patients) + 14, shortlisted_stage1=sum(p.result.shortlisted for p in patients),
                   confirmed_stage2=sum(s != FinalStatus.excluded for s in statuses),
                   likely_eligible=statuses.count(FinalStatus.likely_eligible),
@@ -206,9 +208,9 @@ def trace_for(study: Study, funnel: Funnel):
     return [
         TraceStep(step=1, name="Prefilter: SQL on the warehouse",
                   detail=f"Built a parameterised query from {n_struct} structured criteria. "
-                         f"{funnel.candidates_after_sql} of 412 admitted patients are candidates. "
-                         f"{sum(g.count for g in funnel.removed_before_screening)} patients with a do-not-contact flag "
-                         "were removed first.", seconds=0.04),
+                         f"{funnel.candidates_after_sql} of 412 admitted patients are candidates."
+                         + (f" {sum(g.count for g in funnel.removed_before_screening)} patients with a do-not-contact flag "
+                            "were removed first." if funnel.removed_before_screening else ""), seconds=0.04),
         TraceStep(step=2, name="Stage 1: screener reads notes", model="SCREENER",
                   detail=f"Checked {n_notes} notes criteria for each candidate, one call per criterion. "
                          f"Shortlisted {funnel.shortlisted_stage1} patients.", seconds=14.2),
