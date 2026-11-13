@@ -60,7 +60,7 @@
     $("screening").innerHTML = `
       <h2 class="nhsuk-heading-l">Screening</h2>
       <div class="nhsuk-grid-row"><div class="nhsuk-grid-column-two-thirds">
-        <p>Advolare checks the hospital's records in 5 steps. Code filters the structured data first. Then two AI models read the clinical notes separately, every quote they give is checked against the record, and code combines the answers. You make the final decision for every patient.</p>
+        <p>Advolare checks the hospital's records in 5 steps. Code filters the structured data first. Then AI reads each patient's clinical notes, every quote it gives is checked against the record, and code combines the answers. You make the final decision for every patient.</p>
         <p><span class="adv-device">Runs on this device</span> No patient data leaves the DGX Spark.</p>
       </div></div>
       <div id="progress"></div>
@@ -144,7 +144,7 @@
         <div class="adv-funnel">
           ${bar("Candidates after record check (SQL)", f.candidates_after_sql)}
           ${bar("Shortlisted by the screener (stage 1)", f.shortlisted_stage1)}
-          ${bar("Still in after the verifier (stage 2)", f.confirmed_stage2)}
+          ${(S.run.trace || []).some(t => t.step === 3 && t.detail.startsWith("Not used")) ? "" : bar("Still in after the verifier (stage 2)", f.confirmed_stage2)}
           ${bar("Likely eligible", f.likely_eligible)}
         </div>
         ${A.inset(`<p>These are suggestions. Open each patient to check the evidence before you approve them for contact.</p>`)}
@@ -244,7 +244,10 @@
     }).join("");
     const allFlags = r.assessments.flatMap(a => a.flags.map(f => flagText(a.criterion_id, f)));
     const flags = allFlags.length ? A.warning("Check these before you decide", `<ul>${allFlags.map(t => `<li>${A.esc(t)}</li>`).join("")}</ul>`) : "";
-    const reasons = r.reasons.length ? A.inset(`<p>${r.status === "excluded" ? "Excluded because:" : r.status === "needs_review" ? "Needs review because:" : "Why:"}</p><ul>${r.reasons.map(x => `<li>${A.esc(x)}</li>`).join("")}</ul>`) : "";
+    const quiet = r.reasons.filter(x => x.startsWith("Not mentioned in the notes"));
+    const main = r.reasons.filter(x => !quiet.includes(x));
+    const reasons = (main.length ? A.inset(`<p>${r.status === "excluded" ? "Excluded because:" : r.status === "needs_review" ? "Needs review because:" : "Why:"}</p><ul>${main.map(x => `<li>${A.esc(x)}</li>`).join("")}</ul>`) : "")
+      + (quiet.length ? `<p class="nhsuk-body-s">Exclusions not mentioned anywhere in the notes (every note was read):</p><ul class="nhsuk-body-s">${quiet.map(x => `<li>${A.esc(x.replace(/^Not mentioned in the notes \([^)]*\): /, ""))}</li>`).join("")}</ul>` : "");
     const decided = p.decision !== "pending";
     const decisionForm = decided ? `
       <h2 class="nhsuk-heading-m">Your decision</h2>

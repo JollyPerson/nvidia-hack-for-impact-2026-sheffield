@@ -99,4 +99,4 @@ def test_single_model_mode_skips_stage_2(monkeypatch):
     assert not any(f.type == "stage_disagreement" for r in run.patients for a in r.assessments for f in a.flags)
     by_id = {r.patient_id: r.status.value for r in run.patients}
     assert by_id["P001"] == "likely_eligible" and by_id["P002"] == "excluded"
-    assert any(s["step"] == 3 and s["state"] == "done" and "single-model" in s["detail"] for s in steps)
+    assert any(s["step"] == 3 and s["state"] == "done" and "Not used" in s["detail"] for s in steps)
