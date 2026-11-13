@@ -88,7 +88,13 @@
 
   // ---------- Free text -> draft criteria ----------
   const describe = document.getElementById("describe");
-  A.api("/api/criteria/example").then(r => { describe.placeholder = r.text; }).catch(() => {});
+  const showHelper = () => {
+    const on = !!A.F.draft_criteria;
+    document.getElementById("draft-helper").classList.toggle("adv-hidden", !on);
+    if (on && !describe.placeholder) A.api("/api/criteria/example").then(r => { describe.placeholder = r.text; }).catch(() => {});
+  };
+  A.onFeaturesChanged = showHelper;
+  A.features().then(() => { showHelper(); A.devPanel(); });
   document.getElementById("draft").addEventListener("click", async e => {
     const btn = e.currentTarget, text = describe.value.trim() || describe.placeholder;
     if (!describe.value.trim()) describe.value = text;

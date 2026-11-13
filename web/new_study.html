@@ -39,7 +39,7 @@
         <h1>Create a study</h1>
         <div class="nhsuk-grid-row"><div class="nhsuk-grid-column-two-thirds" id="details"></div></div>
         <h2 class="nhsuk-heading-l">Eligibility criteria</h2>
-        <div class="nhsuk-grid-row"><div class="nhsuk-grid-column-two-thirds">
+        <div class="nhsuk-grid-row adv-hidden" id="draft-helper"><div class="nhsuk-grid-column-two-thirds">
           <div class="nhsuk-form-group">
             <label class="nhsuk-label nhsuk-label--m" for="describe">Describe who you need (optional)</label>
             <div class="nhsuk-hint" id="describe-hint">Write it as you would to a colleague. Advolare turns it into draft criteria below for you to check and change. Everything you type stays on this device.</div>
@@ -58,6 +58,7 @@
   </div>
   <footer class="nhsuk-footer" role="contentinfo">
     <div class="nhsuk-width-container">
+      <div id="adv-dev" class="adv-dev adv-hidden"></div>
       <div class="nhsuk-footer__meta">
         <h2 class="nhsuk-u-visually-hidden">About this service</h2>
         <p class="nhsuk-body-s">Advolare runs entirely on an NVIDIA DGX Spark. No patient data leaves the device.

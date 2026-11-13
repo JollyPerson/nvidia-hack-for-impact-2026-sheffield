@@ -1,5 +1,41 @@
 // Shared helpers for building NHS.UK frontend components from API data. No framework.
 const A = {
+  F: {}, // feature flags from /api/features (extras can be switched off at deploy time)
+  async features() {
+    try { A.F = await A.api("/api/features"); } catch (e) { A.F = {}; }
+    return A.F;
+  },
+  onFeaturesChanged: null, // a page sets this to re-render in place when a developer toggle changes
+
+  // ---------- Developer mode: feature toggles in the footer ----------
+  FEATURE_TITLES: { do_not_contact: "Do-not-contact filter", draft_criteria: "Draft criteria from free text",
+    fairness: "Fairness check", what_if: "What if", screening_log: "Screening log",
+    invitation_letter: "Invitation letter", fhir_export: "FHIR export and SNOMED codes" },
+  async devPanel() {
+    const box = document.getElementById("adv-dev");
+    if (!box) return;
+    let rows;
+    try { rows = await A.api("/api/dev/features"); } catch (e) { return; } // 404 = developer mode is off
+    box.classList.remove("adv-hidden");
+    box.innerHTML = `<div class="nhsuk-form-group"><fieldset class="nhsuk-fieldset" aria-describedby="adv-dev-hint">
+      <legend class="nhsuk-fieldset__legend nhsuk-fieldset__legend--s">${A.tag("Developer mode", "yellow")} Features</legend>
+      <div class="nhsuk-hint" id="adv-dev-hint">Turn each extra on or off for this server. Changes apply straight away for everyone using it and are lost when the server restarts. The deploy settings are in deploy/features.env.</div>
+      <div class="nhsuk-checkboxes adv-dev-grid">${rows.map(r => `<div class="nhsuk-checkboxes__item">
+        <input class="nhsuk-checkboxes__input" id="dev-${r.name}" type="checkbox" data-feature="${r.name}"${r.enabled ? " checked" : ""} aria-describedby="dev-${r.name}-hint">
+        <label class="nhsuk-label nhsuk-checkboxes__label" for="dev-${r.name}">${A.esc(A.FEATURE_TITLES[r.name] || r.name)}</label>
+        <div class="nhsuk-hint nhsuk-checkboxes__hint" id="dev-${r.name}-hint">${A.esc(r.label)}. Set by ${A.esc(r.source)}.</div></div>`).join("")}</div>
+      </fieldset></div>
+      <button class="nhsuk-button nhsuk-button--secondary nhsuk-button--small" type="button" id="adv-dev-reset">Use deploy settings</button>`;
+    const apply = async (method, body) => {
+      await A.api("/api/dev/features", { method, body: body && JSON.stringify(body) });
+      await A.features();
+      if (A.onFeaturesChanged) await A.onFeaturesChanged();
+      A.devPanel();
+    };
+    box.querySelectorAll("[data-feature]").forEach(cb => cb.addEventListener("change", () =>
+      apply("POST", { name: cb.dataset.feature, enabled: cb.checked })));
+    document.getElementById("adv-dev-reset").addEventListener("click", () => apply("DELETE"));
+  },
   esc(s) {
     return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   },
