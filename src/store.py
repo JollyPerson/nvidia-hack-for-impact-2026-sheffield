@@ -127,6 +127,15 @@ def create_study(study: Study, db: Path | str | None = None) -> Study:
         return _study_from_row(conn, row)
 
 
+def update_study_details(study: Study, db: Path | str | None = None) -> None:
+    """Overwrite a study's own fields (not its criteria) with `study` (used to refresh the demo studies)."""
+    data = study.model_dump(mode="json", exclude={"criteria"})
+    cols = [c for c in STUDY_COLUMNS if c != "id"]
+    with _connect(db) as conn:
+        conn.execute(f"UPDATE Studies SET {', '.join(f'{c} = ?' for c in cols)} WHERE id = ?",
+                     [data[c] for c in cols] + [study.id])
+
+
 def replace_criteria(study_id: str, criteria: list[Criterion], db: Path | str | None = None) -> None:
     """Replace a study's criteria (used to refresh the demo studies). Criteria must have ids."""
     with _connect(db) as conn:
