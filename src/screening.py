@@ -39,7 +39,7 @@ from src.models import (
     Verdict,
     VerdictValue,
 )
-from src.tools import TOOL_SCHEMAS, PatientTools
+from src.tools import TOOL_SCHEMAS, PatientTools, resolve_table
 
 log = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ def _pointer_block(tools: PatientTools, pointers: list[Citation]) -> str:
         if key in seen:
             continue
         seen.add(key)
-        rec = tools.get_record(p.table, p.record_id)
+        rec = tools.get_record(p.table, p.record_id, around=p.quote)
         if rec is not None:
             records.append(rec)
     if not records:
@@ -159,6 +159,9 @@ def screen_criterion(
     except openai.OpenAIError as e:
         log.error("model server error (%s, %s): %s", role, tools.patient_id, e)
         verdict = Verdict(verdict=VerdictValue.insufficient, reasoning=f"model server error: {type(e).__name__}")
+    except Exception as e:  # noqa: BLE001 - one odd reply must not stop a whole screening run
+        log.exception("unexpected error (%s, %s)", role, tools.patient_id)
+        verdict = Verdict(verdict=VerdictValue.insufficient, reasoning=f"screening error: {type(e).__name__}")
 
     if audit is not None:
         audit.append(
@@ -182,7 +185,9 @@ def enforce_negative_evidence(v: Verdict) -> Verdict:
     A condition missing from the coded diagnoses, or normal observations, never
     proves it absent, so such a verdict becomes `insufficient`.
     """
-    if v.verdict != VerdictValue.not_met or any(c.table == "ClinicalNotes" for c in v.citations):
+    if v.verdict != VerdictValue.not_met or any(
+        resolve_table(c.table) == "ClinicalNotes" for c in v.citations
+    ):
         return v
     return Verdict(
         verdict=VerdictValue.insufficient,
@@ -191,8 +196,13 @@ def enforce_negative_evidence(v: Verdict) -> Verdict:
     )
 
 
-def _excluded_by(v: Verdict | None, c: Criterion) -> bool:
-    return c.type == CriterionType.exclusion and v is not None and v.verdict == VerdictValue.met and bool(v.citations)
+def _excluded_by(v: Verdict | None, c: Criterion, tools: PatientTools) -> bool:
+    """Stage 1 drops a patient only on an exclusion that is `met` AND backed by at
+    least one citation that really exists in this patient's records. An exclusion
+    resting on invented evidence goes to stage 2 instead."""
+    if c.type != CriterionType.exclusion or v is None or v.verdict != VerdictValue.met:
+        return False
+    return any(tools.citation_checks_out(ct.table, ct.record_id, ct.field, ct.quote) for ct in v.citations)
 
 
 def screen_patient(
@@ -215,7 +225,7 @@ def screen_patient(
     for i, c in criteria:
         a = assessments[_criterion_id(c, i)]
         a.stage1 = screen_criterion(llm, tools, c, "screener", audit=audit)
-        if _excluded_by(a.stage1, c):
+        if _excluded_by(a.stage1, c, tools):
             result.reasons.append(f"Stage 1: exclusion met: {c.description}")
             if config.STAGE1_STOP_ON_EXCLUSION:
                 break

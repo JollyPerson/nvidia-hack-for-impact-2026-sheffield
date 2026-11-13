@@ -172,6 +172,48 @@ def test_not_met_with_note_is_kept(conn):
     assert v.verdict == VerdictValue.not_met
 
 
+def test_invented_exclusion_evidence_does_not_drop_patient(conn):
+    def excl(quote, rid="N-1001"):
+        return response(content=json.dumps({"reasoning": "on home O2", "basis": "direct_evidence", "verdict": "met",
+                                            "citations": [_cite("ClinicalNotes", rid, "NoteText", quote)]}))
+
+    study = STUDY.model_copy(update={"criteria": [STUDY.criteria[1]]})
+    done, insuff = response(content="done"), response(content=json.dumps(
+        {"reasoning": "x", "basis": "nothing_found", "verdict": "insufficient", "citations": []}))
+    # quote is not in P001's note -> not dropped, verifier runs
+    r = screen_patient(LLM(ScriptedClient([done, excl("home O2 2L via concentrator"), done, insuff])),
+                       conn, study, "P001")
+    assert r.shortlisted and r.assessments[0].stage2 is not None
+    # record belongs to another patient -> not dropped either
+    r = screen_patient(LLM(ScriptedClient([done, excl("home O2 2L", rid="N-2001"), done, insuff])),
+                       conn, study, "P001")
+    assert r.shortlisted
+    # real quote (different case/spacing) -> dropped
+    r = screen_patient(LLM(ScriptedClient([done, excl("on HOME o2  2L", rid="N-2001")])), conn, study, "P002")
+    assert not r.shortlisted
+
+
+def test_pointer_window_is_centred_on_the_quote(conn):
+    long_text = "filler. " * 400 + "Pt on home O2 2L overnight. " + "more. " * 50
+    conn.execute("INSERT INTO ClinicalNotes VALUES ('N-9','E-101','P001','ward round','FY1','2026-11-12',?)",
+                 (long_text,))
+    rec = PatientTools(conn, "P001").get_record("ClinicalNotes", "N-9", around="home O2 2L")
+    assert "home O2 2L" in rec["NoteText"]
+
+
+def test_table_names_are_matched_loosely(conn):
+    t = PatientTools(conn, "P001")
+    assert t.get_record("clinicalnote", "N-1001")["table"] == "ClinicalNotes"
+    assert t.citation_checks_out("PATHOLOGY", "L-1001", "Value", "148")
+    assert not t.citation_checks_out("PatientContacts", "P001", "Email", "example.com")
+
+
+def test_unexpected_error_gives_insufficient(conn):
+    fake = ScriptedClient([RuntimeError("boom")])
+    v = screen_criterion(LLM(fake), PatientTools(conn, "P001"), STUDY.criteria[0], "screener")
+    assert v.verdict == VerdictValue.insufficient
+
+
 def test_verdict_schema_puts_verdict_last():
     assert list(llm_mod.VERDICT_SCHEMA["properties"])[-1] == "verdict"
 
