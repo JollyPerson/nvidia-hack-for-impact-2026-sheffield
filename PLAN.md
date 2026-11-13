@@ -65,6 +65,8 @@ This is Saif's "fast prefill / fast decode" split. Here is the honest version fo
 ### 5. Drop the embedding retriever from v1
 **Why:** Saif's flow has LLM 1 read the patient's notes row by row. With 3–6 short notes per patient that's 1–2k tokens, so the whole history fits in context. A retriever adds a component that can miss evidence and costs build time. It's the first thing to add if we scale to real records.
 
+**Notes are pre-ingested** as raw text in the `notes` table (like a real EHR), but **screened live per trial**. Criteria aren't known in advance, and a pre-built summary would miss the niche ones. Put the patient's notes first in the prompt and the criteria after, with vLLM `--enable-prefix-caching`, so each patient's notes are prefilled once and reused across criteria. Alternatively, ask about all of a patient's criteria in one call. A pre-computed general patient profile (last visit, smoking, active diagnoses) stored as SQL columns is a "next steps" idea, not a today task.
+
 ### 6. Validation layer is a separate step, not part of the prompt
 **Why:** judges will ask "does it hallucinate?" Prompts can't guarantee that; code can. After the cascade:
 - **Quote grounding:** each MET/NOT_MET must carry a quote that appears verbatim (whitespace-normalised) in *that patient's* note with that `note_id`. Otherwise downgrade to UNKNOWN.
