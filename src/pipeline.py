@@ -10,8 +10,10 @@
 from __future__ import annotations
 
 import sqlite3
+import threading
 import time
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from typing import Callable
 
@@ -41,14 +43,16 @@ class _TimedLLM:
         self.llm = llm
         self.seconds: dict[str, float] = defaultdict(float)
         self.calls: Counter = Counter()
+        self._lock = threading.Lock()  # patients are screened in parallel threads
 
     def _timed(self, fn, role, *args, **kwargs):
         start = time.perf_counter()
         try:
             return fn(role, *args, **kwargs)
         finally:
-            self.seconds[role] += time.perf_counter() - start
-            self.calls[role] += 1
+            with self._lock:
+                self.seconds[role] += time.perf_counter() - start
+                self.calls[role] += 1
 
     def chat(self, role, *args, **kwargs):
         return self._timed(self.llm.chat, role, *args, **kwargs)
@@ -79,6 +83,50 @@ def _code_assessments(study: Study, citations: dict) -> list[CriterionAssessment
     ]
 
 
+def _screen_all(llm, conn, study, patient_ids, workers, audit, emit, n_notes) -> list[PatientResult]:
+    """screen_patient for every candidate, `workers` at a time. Results keep the candidates' order.
+
+    The model server takes several requests at once (OLLAMA_NUM_PARALLEL), so patients run in parallel
+    threads, each with its own read-only warehouse connection (sqlite connections stay on one thread).
+    """
+    if workers == 1:
+        out = []
+        for n, pid in enumerate(patient_ids, 1):
+            emit(_step(2, "running", f"Patient {n} of {len(patient_ids)}: checking {n_notes} notes criteria.",
+                       model=config.SCREENER_MODEL))
+            out.append(screen_patient(llm, conn, study, pid, audit=audit))
+        return out
+
+    local = threading.local()
+
+    def one(pid: str) -> PatientResult:
+        if not hasattr(local, "conn"):
+            # Read-only, used by this thread only; check_same_thread=False just lets the main thread close it.
+            local.conn = sqlite3.connect(f"file:{config.DB_PATH}?mode=ro", uri=True, check_same_thread=False)
+            local.conn.row_factory = sqlite3.Row
+            opened.append(local.conn)
+        return screen_patient(llm, local.conn, study, pid, audit=audit)
+
+    opened: list[sqlite3.Connection] = []
+    results: dict[str, PatientResult] = {}
+    try:
+        with ThreadPoolExecutor(max_workers=workers, thread_name_prefix="screen") as pool:
+            futures = {pool.submit(one, pid): pid for pid in patient_ids}
+            for f in as_completed(futures):
+                results[futures[f]] = f.result()
+                done = len(results)
+                emit(_step(2, "running", f"Screened {done} of {len(patient_ids)} patients ({workers} at a time).",
+                           model=config.SCREENER_MODEL))
+                shortlisted = sum(r.shortlisted for r in results.values())
+                if shortlisted:
+                    emit(_step(3, "running", f"Re-checked {shortlisted} shortlisted patients so far.",
+                               model=config.VERIFIER_MODEL))
+    finally:
+        for c in opened:
+            c.close()
+    return [results[pid] for pid in patient_ids]
+
+
 def run_screening(
     study: Study,
     llm: LLM | None = None,
@@ -88,8 +136,12 @@ def run_screening(
     max_candidates: int | None = None,
     now: datetime | None = None,
     audit: list | None = None,
+    workers: int = 1,
 ) -> ScreeningRun:
-    """Screen one study end to end. Opens its own read-only warehouse connection unless one is given."""
+    """Screen one study end to end. Opens its own read-only warehouse connection unless one is given.
+
+    workers > 1 screens that many patients at once (each thread opens its own connection), so it applies
+    only when the pipeline opens the warehouse itself."""
     emit = on_step or (lambda _d: None)
     own_conn = conn is None
     conn = conn or connect_readonly(config.DB_PATH)
@@ -109,28 +161,27 @@ def run_screening(
         run.candidates_after_sql = len(candidates)
         emit(_step(1, "done", detail, time.perf_counter() - t))
 
-        # 2 and 3. Stage 1 screener, then stage 2 verifier for each shortlisted patient
+        # 2 and 3. Stage 1 screener, then stage 2 verifier, for several patients at once
         timed = _TimedLLM(llm or LLM())
         n_notes = sum(c.kind == "notes" for c in study.criteria)
-        results: list[PatientResult] = []
-        for n, cand in enumerate(candidates, 1):
-            emit(_step(2, "running", f"Patient {n} of {len(candidates)}: checking {n_notes} notes criteria.",
-                       model=config.SCREENER_MODEL))
-            r = screen_patient(timed, conn, study, cand.patient_id, audit=audit)
-            results.append(r)
-            shortlisted = sum(x.shortlisted for x in results)
-            if shortlisted:
-                emit(_step(3, "running", f"Re-checked {shortlisted} shortlisted patients so far.",
-                           model=config.VERIFIER_MODEL))
+        workers = max(1, min(workers, len(candidates))) if own_conn else 1  # a given connection stays on this thread
+        emit(_step(2, "running", f"Reading notes for {len(candidates)} patients, {workers} at a time.",
+                   model=config.SCREENER_MODEL))
+        t = time.perf_counter()
+        results = _screen_all(timed, conn, study, [c.patient_id for c in candidates], workers, audit, emit, n_notes)
+        wall = time.perf_counter() - t
         run.shortlisted_stage1 = sum(r.shortlisted for r in results)
         errors = sum(v is not None and v.reasoning.startswith(("model server error", "screening error"))
                      for r in results for a in r.assessments for v in (a.stage1, a.stage2))
+        # With patients in parallel the stages overlap, so split the wall time by each model's share of the work.
+        total = (timed.seconds["screener"] + timed.seconds["verifier"]) or 1.0
         emit(_step(2, "done", f"Checked {n_notes} notes criteria for {len(results)} candidates, one call per "
-                              f"criterion. Shortlisted {run.shortlisted_stage1}."
+                              f"criterion, {workers} patients at a time. Shortlisted {run.shortlisted_stage1}."
                               + (f" {errors} model calls failed and count as insufficient." if errors else ""),
-                   timed.seconds["screener"], config.SCREENER_MODEL))
+                   wall * timed.seconds["screener"] / total, config.SCREENER_MODEL))
         emit(_step(3, "done", f"Independently re-read the records of the {run.shortlisted_stage1} shortlisted "
-                              "patients.", timed.seconds["verifier"], config.VERIFIER_MODEL))
+                              f"patients. Stages 1 and 2 took {wall:.0f}s together.",
+                   wall * timed.seconds["verifier"] / total, config.VERIFIER_MODEL))
 
         # 4. Validation: model citations only (code-made citations come from the warehouse itself)
         emit(_step(4, "running", "Checking every quote against the cited record."))

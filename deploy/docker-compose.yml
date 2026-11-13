@@ -82,6 +82,8 @@ services:
       # Screening (see api/README.md): ADVOLARE_MOCK=true for canned results; cap on candidates per run (0 = all).
       ADVOLARE_MOCK: ${ADVOLARE_MOCK:-}
       ADVOLARE_MAX_CANDIDATES: ${ADVOLARE_MAX_CANDIDATES:-}
+      ADVOLARE_WORKERS: ${ADVOLARE_WORKERS:-4}            # patients screened at once (Ollama takes 8 requests)
+      STAGE1_STOP_ON_EXCLUSION: ${STAGE1_STOP_ON_EXCLUSION:-1}  # stop stage 1 at a clear exclusion (fewer calls)
       # Extras (see api/README.md). Empty = default. Set in deploy/features.env (committed) or ~/trialmatch/features.env (Spark only).
       ADVOLARE_DEV_MODE: ${ADVOLARE_DEV_MODE:-}
       FEATURES_ALL: ${FEATURES_ALL:-}

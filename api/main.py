@@ -55,6 +55,11 @@ def max_candidates() -> int | None:
     return n or None
 
 
+def workers() -> int:
+    """ADVOLARE_WORKERS: patients screened at once. The Spark's Ollama takes 8 requests at a time."""
+    return max(1, int(os.environ.get("ADVOLARE_WORKERS", "4") or 1))
+
+
 # Seconds between mock pipeline steps when streaming progress (0 in tests).
 MOCK_STEP_DELAY = float(os.environ.get("ADVOLARE_MOCK_STEP_DELAY", "0.8"))
 
@@ -240,7 +245,7 @@ def _worker(study: Study, live: LiveRun, started: ScreeningRun) -> None:
             run = _mock_pipeline(study, live, emit)
         else:
             run = pipeline.run_screening(study, llm=make_llm(), on_step=emit, run_id=live.run_id,
-                                         max_candidates=max_candidates())
+                                         max_candidates=max_candidates(), workers=workers())
         run.started_at = started.started_at
         store.save_run(run)
         _log(study.id, f"Screening finished in {time.perf_counter() - t0:.0f}s: {run.likely_eligible} likely "

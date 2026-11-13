@@ -43,7 +43,7 @@ def test_real_run_streams_progress_and_saves_results(real_pipeline):
     run, body = screen(real_pipeline)
     steps = [json.loads(line[6:]) for line in body.splitlines() if line.startswith("data: {\"step\"")]
     assert {s["step"] for s in steps if s["state"] == "done"} == {1, 2, 3, 4, 5}
-    assert any(s["state"] == "running" and "Patient 3 of 5" in s["detail"] for s in steps)
+    assert any(s["state"] == "running" and "3 of 5" in s["detail"] for s in steps)
     assert "event: complete" in body
 
     results = client.get(f"/api/studies/{real_pipeline}/results").json()

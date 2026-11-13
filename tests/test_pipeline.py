@@ -42,3 +42,36 @@ def test_structured_inclusions_are_code_verdicts_and_skip_validation(tmp_path):
     assert c1.stage2 is None and not c1.flags
     assert [a.criterion_id for a in p001.assessments] == ["C1", "C2"]
     assert p001.status == FinalStatus.likely_eligible
+
+
+def test_parallel_workers_give_the_same_results_faster(tmp_path, monkeypatch):
+    """workers > 1 screens patients in threads, each with its own read-only connection to the warehouse file."""
+    import time
+
+    import config
+
+    warehouse = tmp_path / "warehouse.db"
+    build_db(warehouse).close()
+    monkeypatch.setattr(config, "DB_PATH", warehouse)
+
+    class SlowClient(RuleBasedClient):
+        def _create(self, **kwargs):
+            time.sleep(0.01)  # stands in for model latency
+            return super()._create(**kwargs)
+
+    def timed(workers):
+        start = time.perf_counter()
+        run = run_screening(STUDY, LLM(SlowClient()), workers=workers)
+        return run, time.perf_counter() - start
+
+    one, t1 = timed(1)
+    many, t4 = timed(4)
+    assert [p.model_dump() for p in many.patients] == [p.model_dump() for p in one.patients]
+    assert many.likely_eligible == one.likely_eligible and many.excluded == one.excluded
+    assert t4 < t1 * 0.75
+
+
+def test_given_connection_stays_sequential():
+    steps = []
+    run_screening(STUDY, LLM(RuleBasedClient()), build_db(), on_step=steps.append, workers=4)
+    assert any("Patient 5 of 5" in s["detail"] for s in steps)
