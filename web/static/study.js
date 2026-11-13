@@ -33,13 +33,13 @@
       ])}
       </div></div>
       <h2 class="nhsuk-heading-l">Eligibility criteria</h2>
-      ${A.table("", ["ID", "Criterion", "Type", "How it is checked", "SNOMED CT"], s.criteria.map(c => [
+      ${A.table("", ["ID", "Criterion", "Type", "How it is checked", ...(A.F.fhir_export ? ["SNOMED CT"] : [])], s.criteria.map(c => [
         `<strong>${A.esc(c.id)}</strong>`,
         A.esc(c.description) + (c.kind === "structured" ? `<br><span class="nhsuk-body-s nhsuk-u-secondary-text-colour">${A.esc(A.rule(c))}</span>` : ""),
-        A.typeTag(c.type), A.kindTag(c.kind), `<span class="adv-snomed" data-cid="${A.esc(c.id)}"></span>`]))}
-      <p class="nhsuk-body-s nhsuk-u-secondary-text-colour">SNOMED CT codes are illustrative. Check them in the UK SNOMED CT browser before real use.</p>
-      <a class="nhsuk-button nhsuk-button--secondary" href="/api/studies/${encodeURIComponent(s.id)}/fhir" download>Download criteria as FHIR R5 (JSON)</a>`;
-    A.api(`/api/studies/${encodeURIComponent(s.id)}/snomed`).then(map => document.querySelectorAll(".adv-snomed").forEach(el => {
+        A.typeTag(c.type), A.kindTag(c.kind), ...(A.F.fhir_export ? [`<span class="adv-snomed" data-cid="${A.esc(c.id)}"></span>`] : [])]))}
+      ${A.F.fhir_export ? `<p class="nhsuk-body-s nhsuk-u-secondary-text-colour">SNOMED CT codes are illustrative. Check them in the UK SNOMED CT browser before real use.</p>
+      <a class="nhsuk-button nhsuk-button--secondary" href="/api/studies/${encodeURIComponent(s.id)}/fhir" download>Download criteria as FHIR R5 (JSON)</a>` : ""}`;
+    if (A.F.fhir_export) A.api(`/api/studies/${encodeURIComponent(s.id)}/snomed`).then(map => document.querySelectorAll(".adv-snomed").forEach(el => {
       const m = map[el.dataset.cid]; el.innerHTML = m && m.code ? `${A.esc(m.display)}<br><span class="nhsuk-body-s nhsuk-u-secondary-text-colour">${A.esc(m.code)}</span>` : `<span class="nhsuk-u-secondary-text-colour">No code</span>`;
     })).catch(() => {});
     return true;
@@ -121,13 +121,15 @@
     const notShortlisted = f.candidates_after_sql - f.shortlisted_stage1;
     const removed = f.removed_before_screening || [];
     const nRemoved = removed.reduce((n, g) => n + g.count, 0);
-    const tabs = [["tab-results", "Results"], ["tab-fairness", "Fairness check"], ["tab-whatif", "What if"], ["tab-log", "Screening log"]];
-    S.tab = S.tab || "tab-results";
+    const tabs = [["tab-results", "Results", true], ["tab-fairness", "Fairness check", A.F.fairness],
+      ["tab-whatif", "What if", A.F.what_if], ["tab-log", "Screening log", A.F.screening_log]].filter(t => t[2]);
+    const panel = id => tabs.some(t => t[0] === id) ? `<div class="nhsuk-tabs__panel${S.tab === id ? "" : " nhsuk-tabs__panel--hidden"}" id="${id}" role="tabpanel"><p>Loading…</p></div>` : "";
+    if (!tabs.some(t => t[0] === S.tab)) S.tab = "tab-results";
     $("results").innerHTML = `
       <h2 class="nhsuk-heading-l">Results</h2>
-      <div class="nhsuk-tabs">
+      <div class="${tabs.length > 1 ? "nhsuk-tabs" : "adv-no-tabs"}">
         <h2 class="nhsuk-tabs__title">Contents</h2>
-        <ul class="nhsuk-tabs__list" role="tablist">${tabs.map(([id, label]) => `<li class="nhsuk-tabs__list-item${id === S.tab ? " nhsuk-tabs__list-item--selected" : ""}" role="presentation"><a class="nhsuk-tabs__tab" href="#${id}" id="${id}-link" role="tab" aria-controls="${id}" aria-selected="${id === S.tab}">${label}</a></li>`).join("")}</ul>
+        <ul class="nhsuk-tabs__list${tabs.length > 1 ? "" : " adv-hidden"}" role="tablist">${tabs.map(([id, label]) => `<li class="nhsuk-tabs__list-item${id === S.tab ? " nhsuk-tabs__list-item--selected" : ""}" role="presentation"><a class="nhsuk-tabs__tab" href="#${id}" id="${id}-link" role="tab" aria-controls="${id}" aria-selected="${id === S.tab}">${label}</a></li>`).join("")}</ul>
       <div class="nhsuk-tabs__panel${S.tab === "tab-results" ? "" : " nhsuk-tabs__panel--hidden"}" id="tab-results" role="tabpanel">
       <div class="nhsuk-grid-row"><div class="nhsuk-grid-column-two-thirds">
         ${nRemoved ? A.inset(`<p>${nRemoved} patients with a do-not-contact flag were removed by code before screening. Their records were not read by any model.</p>
@@ -144,9 +146,7 @@
       ${group("needs_review", "Needs review", "The models disagree, a quote could not be found, or the records do not say enough.")}
       ${group("excluded", "Excluded", `Both models agree an exclusion criterion applies, with checked quotes. ${notShortlisted} more candidates did not pass stage 1 and are not listed.`)}
       </div>
-      <div class="nhsuk-tabs__panel${S.tab === "tab-fairness" ? "" : " nhsuk-tabs__panel--hidden"}" id="tab-fairness" role="tabpanel"><p>Loading…</p></div>
-      <div class="nhsuk-tabs__panel${S.tab === "tab-whatif" ? "" : " nhsuk-tabs__panel--hidden"}" id="tab-whatif" role="tabpanel"><p>Loading…</p></div>
-      <div class="nhsuk-tabs__panel${S.tab === "tab-log" ? "" : " nhsuk-tabs__panel--hidden"}" id="tab-log" role="tabpanel"><p>Loading…</p></div>
+      ${panel("tab-fairness")}${panel("tab-whatif")}${panel("tab-log")}
       </div>`;
     $("results").querySelectorAll(".adv-patient-link").forEach(b => b.addEventListener("click", () => showPatient(b.dataset.mrn)));
     $("results").querySelectorAll(".nhsuk-tabs__tab").forEach(a => a.addEventListener("click", e => {
@@ -168,8 +168,9 @@
   }
   async function loadExtras() {
     const enc = encodeURIComponent(studyId);
-    const [fair, whatif, log] = await Promise.all([`/api/studies/${enc}/fairness`, `/api/studies/${enc}/what-if`,
-      `/api/studies/${enc}/screening-log`].map(u => A.api(u).catch(() => null)));
+    const get = (on, u) => on ? A.api(u).catch(() => null) : Promise.resolve(null);
+    const [fair, whatif, log] = await Promise.all([get(A.F.fairness, `/api/studies/${enc}/fairness`),
+      get(A.F.what_if, `/api/studies/${enc}/what-if`), get(A.F.screening_log, `/api/studies/${enc}/screening-log`)]);
     if (fair) $("tab-fairness").innerHTML = `
       <h2 class="nhsuk-heading-m">Is the shortlist fair?</h2>
       <div class="nhsuk-grid-row"><div class="nhsuk-grid-column-two-thirds">
@@ -253,11 +254,11 @@
       ${A.summaryList([["Name", A.esc(contact.name)], ["Mobile", A.esc(contact.mobile)], ["Email", A.esc(contact.email)],
         ...(contact.guardian_name ? [["Next of kin", `${A.esc(contact.guardian_name)}, ${A.esc(contact.guardian_phone || "")}`]] : [])])}
       ${A.inset(`<p>These details come from the PatientContacts table. They are shown only after your approval and were never given to an AI model.</p>`)}
-      <h2 class="nhsuk-heading-m">Invitation letter</h2>
+      ${A.F.invitation_letter ? `<h2 class="nhsuk-heading-m">Invitation letter</h2>
       <div class="nhsuk-form-group"><label class="nhsuk-label" for="letter">Draft letter to check and edit</label>
         <div class="nhsuk-hint" id="letter-hint">It does not name the condition. Advolare never sends letters: copy it into your usual letter system.</div>
         <textarea class="nhsuk-textarea" id="letter" rows="18" aria-describedby="letter-hint">Loading…</textarea></div>
-      <button class="nhsuk-button nhsuk-button--secondary" type="button" id="copy-letter">Copy letter</button>` : "";
+      <button class="nhsuk-button nhsuk-button--secondary" type="button" id="copy-letter">Copy letter</button>` : ""}` : "";
     return `
       <a class="nhsuk-back-link" href="#results" id="back"><span class="nhsuk-u-visually-hidden">Back to </span>Results</a>
       <span class="nhsuk-caption-l">${A.esc(S.study.short_title || S.study.id)} screening result</span>
@@ -322,6 +323,7 @@
   }
 
   (async () => {
+    await A.features();
     if (!(await loadStudy())) return;
     const hasRun = await loadResults();
     screeningPanel(hasRun);

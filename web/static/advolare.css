@@ -33,3 +33,5 @@ a.nhsuk-header__service-name:hover { text-decoration: underline; }
 .adv-patient-link { white-space: nowrap; }
 .nhsuk-task-list__status { white-space: nowrap; }
 .nhsuk-table-container { overflow-x: auto; }
+.adv-no-tabs .nhsuk-tabs__title { display: none; }
+.adv-no-tabs .nhsuk-tabs__panel { border: 0; padding: 0; margin: 0; background: none; }

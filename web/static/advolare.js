@@ -1,5 +1,10 @@
 // Shared helpers for building NHS.UK frontend components from API data. No framework.
 const A = {
+  F: {}, // feature flags from /api/features (extras can be switched off at deploy time)
+  async features() {
+    try { A.F = await A.api("/api/features"); } catch (e) { A.F = {}; }
+    return A.F;
+  },
   esc(s) {
     return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   },

@@ -11,12 +11,12 @@ import uuid
 from datetime import datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import config
-from api import extras, mock_data
+from api import extras, features, mock_data
 from api.schemas import (AuditEntry, Contact, Decision, DecisionRequest, DecisionResponse, DraftRequest, DraftResponse,
                          PatientView, ScreeningRun, StudySummary)
 from src.models import Study
@@ -110,14 +110,14 @@ def get_study(study_id: str):
     return _study(study_id)
 
 
-@app.post("/api/criteria/draft", response_model=DraftResponse)
+@app.post("/api/criteria/draft", response_model=DraftResponse, dependencies=[Depends(features.require("draft_criteria"))])
 def draft_criteria(body: DraftRequest):
     """Turn a plain-English description into draft criteria rows for the clinician to check."""
     criteria, assumptions = mock_data.draft_criteria(body.text)
     return DraftResponse(criteria=criteria, assumptions=assumptions)
 
 
-@app.get("/api/criteria/example")
+@app.get("/api/criteria/example", dependencies=[Depends(features.require("draft_criteria"))])
 def example_description():
     return {"text": mock_data.EXAMPLE_DESCRIPTION}
 
@@ -198,7 +198,7 @@ def get_audit(study_id: str):
 
 
 # ---------- Extras ----------
-@app.get("/api/studies/{study_id}/fhir")
+@app.get("/api/studies/{study_id}/fhir", dependencies=[Depends(features.require("fhir_export"))])
 def export_fhir(study_id: str):
     """HL7 FHIR R5 Bundle (ResearchStudy + Group) with SNOMED CT codes, for registries and other systems."""
     study = _study(study_id)
@@ -206,24 +206,24 @@ def export_fhir(study_id: str):
         "Content-Disposition": f'attachment; filename="{study.short_title or study.id}-fhir.json"'})
 
 
-@app.get("/api/studies/{study_id}/snomed")
+@app.get("/api/studies/{study_id}/snomed", dependencies=[Depends(features.require("fhir_export"))])
 def criteria_snomed(study_id: str):
     return {c.id: dict(zip(("code", "display"), extras.snomed_for(c))) for c in _study(study_id).criteria}
 
 
-@app.get("/api/studies/{study_id}/what-if")
+@app.get("/api/studies/{study_id}/what-if", dependencies=[Depends(features.require("what_if"))])
 def what_if(study_id: str):
     """How the shortlist changes without each criterion. Reuses the run's verdicts: no new model calls."""
     return extras.what_if(_study(study_id), _latest(study_id).patients)
 
 
-@app.get("/api/studies/{study_id}/fairness")
+@app.get("/api/studies/{study_id}/fairness", dependencies=[Depends(features.require("fairness"))])
 def fairness(study_id: str):
     _study(study_id)
     return extras.fairness(_latest(study_id).patients)
 
 
-@app.get("/api/studies/{study_id}/patients/{patient_id}/letter")
+@app.get("/api/studies/{study_id}/patients/{patient_id}/letter", dependencies=[Depends(features.require("invitation_letter"))])
 def invitation_letter(study_id: str, patient_id: str):
     """A draft for the research team to check and send themselves. Only after approval; never sent by Advolare."""
     contact = _contact_if_approved(_patient(study_id, patient_id))
@@ -237,17 +237,23 @@ def _log_rows(study_id: str):
     return extras.screening_log(run.patients, run.funnel.candidates_after_sql - run.funnel.shortlisted_stage1)
 
 
-@app.get("/api/studies/{study_id}/screening-log")
+@app.get("/api/studies/{study_id}/screening-log", dependencies=[Depends(features.require("screening_log"))])
 def screening_log(study_id: str):
     _study(study_id)
     return _log_rows(study_id)
 
 
-@app.get("/api/studies/{study_id}/screening-log.csv")
+@app.get("/api/studies/{study_id}/screening-log.csv", dependencies=[Depends(features.require("screening_log"))])
 def screening_log_csv(study_id: str):
     study = _study(study_id)
     return PlainTextResponse(extras.screening_log_csv(_log_rows(study_id)), media_type="text/csv", headers={
         "Content-Disposition": f'attachment; filename="{study.short_title or study.id}-screening-log.csv"'})
+
+
+@app.get("/api/features")
+def get_features():
+    """Which extras are switched on. The pages read this to show or hide tabs and buttons."""
+    return features.flags()
 
 
 @app.get("/api/health")

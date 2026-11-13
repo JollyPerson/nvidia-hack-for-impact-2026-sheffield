@@ -24,6 +24,12 @@ else
   echo "No app in $SRC; keeping the code already in $ROOT/ui"
 fi
 
+# Feature flags for the web app's extras (api/README.md): the committed deploy/features.env first,
+# then an optional Spark-only override in ~/trialmatch/features.env (outside the folders rsync replaces).
+for env_file in "$ROOT/deploy/features.env" "$ROOT/features.env"; do
+  if [[ -f "$env_file" ]]; then set -a; . "$env_file"; set +a; echo "Loaded feature flags from $env_file"; fi
+done
+
 # Pick what to run from the deployed code.
 profiles=()
 [[ -f "$ROOT/ui/app/app.py" ]] && profiles+=(streamlit)
