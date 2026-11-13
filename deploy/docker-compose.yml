@@ -87,7 +87,8 @@ services:
       # Model reasoning (thinking): off by default; on|off for both, or per role. Dev-mode footer can override.
       LLM_REASONING: ${LLM_REASONING:-}
       SCREENER_REASONING: ${SCREENER_REASONING:-}
-      VERIFIER_REASONING: ${VERIFIER_REASONING:-}  # stop stage 1 at a clear exclusion (fewer calls)
+      VERIFIER_REASONING: ${VERIFIER_REASONING:-}
+      ONE_CALL_CHECKS: ${ONE_CALL_CHECKS:-1}  # 0 = tool loop for every check
       # Extras (see api/README.md). Empty = default. Set in deploy/features.env (committed) or ~/trialmatch/features.env (Spark only).
       ADVOLARE_DEV_MODE: ${ADVOLARE_DEV_MODE:-}
       FEATURES_ALL: ${FEATURES_ALL:-}

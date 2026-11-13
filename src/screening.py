@@ -185,8 +185,13 @@ def screen_criterion(
     messages: list[dict] = [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
     tool_calls_made = 0
+    # Every note is already in the prompt: add the coded diagnoses too and ask for the verdict in ONE call,
+    # with no tool loop (config.ONE_CALL_CHECKS). Labs and observations are structured criteria (SQL).
+    one_call = config.ONE_CALL_CHECKS and all_notes_shown
+    if one_call:
+        messages[1]["content"] += "\nCoded diagnoses for this patient: " + tools.get_diagnoses()
     try:
-        for _step in range(config.MAX_TOOL_STEPS):
+        for _step in range(0 if one_call else config.MAX_TOOL_STEPS):
             msg = llm.chat(role, messages, tools=TOOL_SCHEMAS)
             messages.append(msg)
             calls = msg.get("tool_calls") or []

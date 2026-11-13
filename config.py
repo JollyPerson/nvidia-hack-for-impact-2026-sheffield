@@ -67,6 +67,8 @@ MAX_NOTES_RETURNED = 4  # search_notes returns at most this many notes
 # model rarely needs to search: about 2 calls per check instead of about 5. Capped so the prompt still
 # fits the 8k budget; 0 turns it off (the model then finds notes with search_notes only).
 NOTES_IN_PROMPT_CHARS = int(os.getenv("NOTES_IN_PROMPT_CHARS", "8000"))
+# When every note fits in the prompt, check a criterion in one model call (no tool loop). 0 = tool loop.
+ONE_CALL_CHECKS = os.getenv("ONE_CALL_CHECKS", "1").strip().lower() not in ("0", "false", "no", "off")
 MAX_ROWS_RETURNED = 15  # labs / observations / diagnoses rows per tool call
 
 # --- Data -------------------------------------------------------------------------

@@ -371,3 +371,20 @@ def test_nothing_found_without_all_notes_is_not_marked(conn, monkeypatch):
     fake = ScriptedClient([response(content="done"), response(content=NOTHING)])
     v = screen_criterion(LLM(fake), PatientTools(conn, "P005"), STUDY.criteria[1], "screener")
     assert not v.reasoning.startswith(ALL_NOTES_READ)
+
+
+def test_one_call_check_when_every_note_is_shown(conn, monkeypatch):
+    monkeypatch.setattr(config, "ONE_CALL_CHECKS", True)
+    fake = ScriptedClient([response(content=NOTHING)])
+    v = screen_criterion(LLM(fake), PatientTools(conn, "P005"), STUDY.criteria[1], "screener")
+    assert len(fake.requests) == 1 and "tools" not in fake.requests[0]
+    assert "Coded diagnoses for this patient" in fake.requests[0]["messages"][1]["content"]
+    assert v.verdict == VerdictValue.insufficient
+
+
+def test_tool_loop_when_notes_are_not_all_shown(conn, monkeypatch):
+    monkeypatch.setattr(config, "ONE_CALL_CHECKS", True)
+    monkeypatch.setattr(config, "NOTES_IN_PROMPT_CHARS", 0)
+    fake = ScriptedClient([response(content="done"), response(content=NOTHING)])
+    screen_criterion(LLM(fake), PatientTools(conn, "P005"), STUDY.criteria[1], "screener")
+    assert len(fake.requests) == 2
