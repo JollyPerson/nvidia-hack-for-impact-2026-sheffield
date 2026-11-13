@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Generated warehouse (rebuild with: python data/generate.py)
+data/*.db
+data/*.db-journal
+data/*.db-wal
+data/*.db-shm
+*.sqlite
+*.sqlite3
+
+# Audit logs and run outputs
+logs/
+*.log
+*.jsonl
+outputs/
+
+# Secrets / local settings
+.env
+.env.*
+
+# Model weights and caches (served locally, never committed)
+*.gguf
+*.safetensors
+*.bin
+.cache/
+
+# Editors and OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Local agent settings
+.claude/
