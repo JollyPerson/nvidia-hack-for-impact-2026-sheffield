@@ -8,6 +8,7 @@ docker-compose stack (http://ollama:11434/v1).
 from __future__ import annotations
 
 import os
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -53,3 +54,6 @@ MAX_ROWS_RETURNED = 15  # labs / observations / diagnoses rows per tool call
 DB_PATH = Path(os.getenv("DB_PATH", ROOT / "data" / "warehouse.db"))
 # "Today" for time windows. Fixed by env for reproducible demos; else real date.
 REFERENCE_DATE = os.getenv("REFERENCE_DATE")  # e.g. "2026-11-13"
+# Fixed "now" for the prefilter's ages and time windows. Matches the fixed
+# "now" in data/generate.py, so the synthetic data never ages out of a window.
+REFERENCE_NOW = datetime.fromisoformat(os.getenv("REFERENCE_NOW", "2026-11-13T09:00:00"))
