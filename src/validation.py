@@ -28,8 +28,15 @@ def _norm(text) -> str:
 
 
 def _clean_quote(quote: str) -> str:
-    """Drop the '…' the tools add when they shorten a long note, plus stray quote marks."""
+    """Drop the '…' the tools add when they shorten a long note, plus stray quote marks.
+    Notes reach the models as JSON, so a copied line break may arrive as the two characters \\n."""
+    quote = quote.replace("\\n", " ").replace("\\t", " ").replace('\\"', '"')
     return _norm(quote).strip(" .…\"'")
+
+
+def _quote_parts(quote: str) -> list[str]:
+    """Split a quote where the model left words out ("Working dx UTI... Impression: sepsis")."""
+    return [p for p in (_clean_quote(x) for x in re.split(r"\.{2,}|…", quote)) if p]
 
 
 def _quote_has_number(quote: str, value: float) -> bool:
@@ -112,8 +119,10 @@ def check_citation(
 
     if isinstance(stored, (int, float)):  # numbers: the quote must contain the stored value
         ok = _quote_has_number(quote, stored)
-    else:  # text: the exact value (e.g. a short code), or a passage of at least 3 characters
-        ok = quote == _norm(stored) or (len(quote) >= 3 and quote in _norm(stored))
+    else:  # text: the exact value (e.g. a short code), or passages of at least 3 characters.
+        # A quote with "..." passes only if EVERY part really appears in this same record.
+        text, parts = _norm(stored), _quote_parts(c.quote)
+        ok = quote == text or (bool(parts) and all(len(p) >= 3 and p in text for p in parts))
     return None if ok else "quote does not match the record"
 
 

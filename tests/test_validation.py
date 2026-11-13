@@ -80,6 +80,11 @@ def cite(table, record_id, field, quote):
         cite("ClinicalNote", "N1", "notetext", "home O2 2L"),  # singular table, field in lower case
         cite("ClinicalNotes", "N1", "NoteText", "…COPD on home O2 2L"),  # '…' from a shortened note
         cite("ClinicalNotes", "N1", "NoteText", "\"No hx of MI.\""),  # wrapped in quote marks
+        # Seen with the real models on the real warehouse: two real passages joined with "..."
+        cite("ClinicalNotes", "N1", "NoteText", "COPD on home O2 2L... No hx of MI."),
+        cite("ClinicalNotes", "N1", "NoteText", "COPD on home O2 … via concentrator"),
+        # Notes reach the models as JSON, so a line break can be copied as the characters \n
+        cite("ClinicalNotes", "N1", "NoteText", "via concentrator.\\nNo hx of MI"),
     ],
 )
 def test_genuine_citation_passes(conn, citation):
@@ -102,6 +107,11 @@ def test_genuine_citation_passes(conn, citation):
         (cite("PatientContacts", "P1", "MobileNumber", "07700 900123"), "this table cannot be cited"),
         (cite("patientcontacts", "P1", "MobileNumber", "07700 900123"), "this table cannot be cited"),
         (cite("ClinicalNotes", "N1", "NoteText", "…"), "quote does not match the record"),
+        # "..." quotes: every part must be real, in this same note
+        (cite("ClinicalNotes", "N1", "NoteText", "home O2 3L... No hx of MI"), "quote does not match the record"),
+        (cite("ClinicalNotes", "N1", "NoteText", "No new confusion... home O2 2L"), "quote does not match the record"),
+        (cite("ClinicalNotes", "N1", "NoteText", "home O2 2L... no"), "quote does not match the record"),
+        (cite("ClinicalNotes", "N1", "NoteText", "home O2 2L... Known T2DM"), "quote does not match the record"),  # P2's note
         (cite("Medications", "M1", "Drug", "salbutamol"), "this table cannot be cited"),
     ],
 )
