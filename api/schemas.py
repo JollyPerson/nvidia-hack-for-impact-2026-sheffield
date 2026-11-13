@@ -40,7 +40,13 @@ class PatientView(BaseModel):
     result: PatientResult
 
 
+class RemovedGroup(BaseModel):
+    reason: str
+    count: int
+
+
 class Funnel(BaseModel):
+    removed_before_screening: list[RemovedGroup] = []  # do-not-contact flags, removed by code before SQL results
     candidates_after_sql: int
     shortlisted_stage1: int
     confirmed_stage2: int

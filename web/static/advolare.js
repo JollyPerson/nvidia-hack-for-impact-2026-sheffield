@@ -48,8 +48,8 @@ const A = {
     const th = head.map((h, i) => `<th class="nhsuk-table__header${numeric.includes(i) ? " nhsuk-table__header--numeric" : ""}" scope="col">${h}</th>`).join("");
     const tr = rows.map(r => `<tr class="nhsuk-table__row">${r.map((c, i) =>
       `<td class="nhsuk-table__cell${numeric.includes(i) ? " nhsuk-table__cell--numeric" : ""}">${c}</td>`).join("")}</tr>`).join("");
-    return `<table class="nhsuk-table">${caption ? `<caption class="nhsuk-table__caption">${caption}</caption>` : ""}
-      <thead class="nhsuk-table__head"><tr class="nhsuk-table__row">${th}</tr></thead><tbody class="nhsuk-table__body">${tr}</tbody></table>`;
+    return `<div class="nhsuk-table-container"><table class="nhsuk-table">${caption ? `<caption class="nhsuk-table__caption">${caption}</caption>` : ""}
+      <thead class="nhsuk-table__head"><tr class="nhsuk-table__row">${th}</tr></thead><tbody class="nhsuk-table__body">${tr}</tbody></table></div>`;
   },
   inset(html) { return `<div class="nhsuk-inset-text"><span class="nhsuk-u-visually-hidden">Information: </span>${html}</div>`; },
   warning(heading, html) {

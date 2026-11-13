@@ -12,11 +12,11 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 import config
-from api import mock_data
+from api import extras, mock_data
 from api.schemas import (AuditEntry, Contact, Decision, DecisionRequest, DecisionResponse, DraftRequest, DraftResponse,
                          PatientView, ScreeningRun, StudySummary)
 from src.models import Study
@@ -195,6 +195,59 @@ def get_contact(study_id: str, patient_id: str):
 def get_audit(study_id: str):
     _study(study_id)
     return [a for a in store.audit if a["study_id"] == study_id]
+
+
+# ---------- Extras ----------
+@app.get("/api/studies/{study_id}/fhir")
+def export_fhir(study_id: str):
+    """HL7 FHIR R5 Bundle (ResearchStudy + Group) with SNOMED CT codes, for registries and other systems."""
+    study = _study(study_id)
+    return JSONResponse(extras.to_fhir(study), headers={
+        "Content-Disposition": f'attachment; filename="{study.short_title or study.id}-fhir.json"'})
+
+
+@app.get("/api/studies/{study_id}/snomed")
+def criteria_snomed(study_id: str):
+    return {c.id: dict(zip(("code", "display"), extras.snomed_for(c))) for c in _study(study_id).criteria}
+
+
+@app.get("/api/studies/{study_id}/what-if")
+def what_if(study_id: str):
+    """How the shortlist changes without each criterion. Reuses the run's verdicts: no new model calls."""
+    return extras.what_if(_study(study_id), _latest(study_id).patients)
+
+
+@app.get("/api/studies/{study_id}/fairness")
+def fairness(study_id: str):
+    _study(study_id)
+    return extras.fairness(_latest(study_id).patients)
+
+
+@app.get("/api/studies/{study_id}/patients/{patient_id}/letter")
+def invitation_letter(study_id: str, patient_id: str):
+    """A draft for the research team to check and send themselves. Only after approval; never sent by Advolare."""
+    contact = _contact_if_approved(_patient(study_id, patient_id))
+    if contact is None:
+        raise HTTPException(403, "The invitation letter is available only after you approve this patient")
+    return {"text": extras.letter(_study(study_id), contact)}
+
+
+def _log_rows(study_id: str):
+    run = _latest(study_id)
+    return extras.screening_log(run.patients, run.funnel.candidates_after_sql - run.funnel.shortlisted_stage1)
+
+
+@app.get("/api/studies/{study_id}/screening-log")
+def screening_log(study_id: str):
+    _study(study_id)
+    return _log_rows(study_id)
+
+
+@app.get("/api/studies/{study_id}/screening-log.csv")
+def screening_log_csv(study_id: str):
+    study = _study(study_id)
+    return PlainTextResponse(extras.screening_log_csv(_log_rows(study_id)), media_type="text/csv", headers={
+        "Content-Disposition": f'attachment; filename="{study.short_title or study.id}-screening-log.csv"'})
 
 
 @app.get("/api/health")

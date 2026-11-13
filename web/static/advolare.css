@@ -32,3 +32,4 @@ a.nhsuk-header__service-name:hover { text-decoration: underline; }
 .nhsuk-task-list__name-and-hint .nhsuk-task-list__hint { white-space: normal; }
 .adv-patient-link { white-space: nowrap; }
 .nhsuk-task-list__status { white-space: nowrap; }
+.nhsuk-table-container { overflow-x: auto; }

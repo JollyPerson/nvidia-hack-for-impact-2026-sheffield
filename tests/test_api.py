@@ -115,3 +115,37 @@ def test_unknown_study_and_patient():
     assert client.get("/api/studies/S-999").status_code == 404
     run_screening()
     assert client.get("/api/studies/S-001/patients/MRN-000000").status_code == 404
+
+
+def test_fhir_export_has_study_and_eligibility_group():
+    bundle = client.get("/api/studies/S-001/fhir").json()
+    study, group = (e["resource"] for e in bundle["entry"])
+    assert study["resourceType"] == "ResearchStudy" and group["resourceType"] == "Group"
+    assert study["recruitment"]["eligibility"]["reference"] == f"Group/{group['id']}"
+    assert len(group["characteristic"]) == 7
+    assert [c["exclude"] for c in group["characteristic"]].count(True) == 4
+
+
+def test_what_if_reuses_verdicts():
+    run_screening()
+    rows = {r["criterion_id"]: r for r in client.get("/api/studies/S-001/what-if").json()}
+    assert rows["C5"]["likely_eligible_without"] > rows["C5"]["likely_eligible_now"]  # negation trap + home O2
+    assert rows["C2"]["extra_candidates_to_screen"] > 0
+
+
+def test_fairness_and_screening_log():
+    run_screening()
+    fair = client.get("/api/studies/S-001/fairness").json()
+    assert fair["shortlist_size"] == 6 and fair["flags"]
+    log = client.get("/api/studies/S-001/screening-log.csv")
+    assert log.headers["content-type"].startswith("text/csv") and "MRN-100231" in log.text
+    assert "07700" not in log.text
+
+
+def test_letter_only_after_approval():
+    run_screening()
+    url = "/api/studies/S-001/patients/MRN-100231"
+    assert client.get(url + "/letter").status_code == 403
+    client.post(url + "/decision", json={"decision": "approved"})
+    text = client.get(url + "/letter").json()["text"]
+    assert text.startswith("Dear Margaret") and "pneumonia" not in text.lower()
