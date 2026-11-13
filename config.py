@@ -63,6 +63,10 @@ STAGE1_STOP_ON_EXCLUSION = os.getenv("STAGE1_STOP_ON_EXCLUSION", "0") == "1"
 MAX_TOOL_STEPS = int(os.getenv("MAX_TOOL_STEPS", "4"))  # tool rounds per criterion
 MAX_NOTE_CHARS = 1200   # one note's text is cut to this in a tool result
 MAX_NOTES_RETURNED = 4  # search_notes returns at most this many notes
+# Each check starts with the patient's own notes in the prompt (newest first, whole notes only), so the
+# model rarely needs to search: about 2 calls per check instead of about 5. Capped so the prompt still
+# fits the 8k budget; 0 turns it off (the model then finds notes with search_notes only).
+NOTES_IN_PROMPT_CHARS = int(os.getenv("NOTES_IN_PROMPT_CHARS", "8000"))
 MAX_ROWS_RETURNED = 15  # labs / observations / diagnoses rows per tool call
 
 # --- Data -------------------------------------------------------------------------

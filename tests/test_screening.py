@@ -324,3 +324,32 @@ def test_criteria_in_parallel_give_the_same_verdicts():
             many = screen_patient(LLM(RuleBasedClient()), _SharedConn(conn), STUDY, pid, workers=4)
             assert many.model_dump() == one.model_dump(), pid
         conn.close()
+
+
+def test_notes_are_in_the_first_prompt(conn):
+    fake = ScriptedClient([response(content="done"), response(content=GOOD)])
+    screen_criterion(LLM(fake), PatientTools(conn, "P002"), STUDY.criteria[1], "screener")
+    first = fake.requests[0]["messages"]
+    user = next(m["content"] for m in first if m["role"] == "user")
+    system = first[0]["content"]
+    assert "Clinical notes for this patient" in user and "home O2" in user.replace("oxygen", "O2")
+    assert "shown in full" in system
+    assert len(fake.requests) == 2  # read the notes, said done, gave the verdict: no tool calls needed
+    assert not any(c[1] in user for c in CONTACTS if c[1])  # contact details never reach a model
+
+
+def test_notes_in_prompt_can_be_switched_off(conn, monkeypatch):
+    monkeypatch.setattr(config, "NOTES_IN_PROMPT_CHARS", 0)
+    fake = ScriptedClient([response(content="done"), response(content=GOOD)])
+    screen_criterion(LLM(fake), PatientTools(conn, "P002"), STUDY.criteria[1], "screener")
+    user = next(m["content"] for m in fake.requests[0]["messages"] if m["role"] == "user")
+    assert "Clinical notes for this patient" not in user
+    assert "search_notes" in fake.requests[0]["messages"][0]["content"]
+
+
+def test_notes_in_prompt_respect_the_limit(conn, monkeypatch):
+    monkeypatch.setattr(config, "NOTES_IN_PROMPT_CHARS", 60)  # smaller than any one note
+    fake = ScriptedClient([response(content="done"), response(content=GOOD)])
+    screen_criterion(LLM(fake), PatientTools(conn, "P002"), STUDY.criteria[1], "screener")
+    user = next(m["content"] for m in fake.requests[0]["messages"] if m["role"] == "user")
+    assert "Clinical notes for this patient" not in user

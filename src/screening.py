@@ -28,7 +28,7 @@ from datetime import date
 import openai
 
 import config
-from src.llm import LLM, PromptTooLong
+from src.llm import LLM, PromptTooLong, max_output_tokens
 from src.models import (
     Citation,
     Criterion,
@@ -47,6 +47,7 @@ log = logging.getLogger(__name__)
 SYSTEM_PROMPT = """You check ONE clinical-trial criterion for ONE hospital patient, using only the patient's records.
 Today is {today}. Patient: sex {sex}, date of birth {dob}.
 
+{notes_note}
 Use the tools to find evidence: search_notes (free-text notes), get_labs, get_observations, get_diagnoses.
 Search with several different keywords, synonyms and abbreviations (e.g. "home oxygen", "LTOT", "O2").
 Watch for negation ("no", "denies", "not on"), uncertainty ("?", "query", "possible") and dates.
@@ -95,6 +96,47 @@ def _criterion_id(c: Criterion, index: int) -> str:
     return c.id or f"C{index + 1}"
 
 
+NOTES_SHOWN = (
+    "The patient's clinical notes are shown in full in the user message. Read them first. If they answer the "
+    "criterion, reply \"done\" straight away; call tools only for labs, observations, diagnoses{more}."
+)
+NOTES_NOT_SHOWN = "The patient's clinical notes are not shown: find them with search_notes."
+
+
+def _notes_block(tools: PatientTools, role: str) -> tuple[str, str]:
+    """The patient's notes, newest first and whole, within the prompt budget. Returns (block, system note).
+
+    Read by code from the warehouse for this patient only (never PatientContacts)."""
+    limit = config.NOTES_IN_PROMPT_CHARS
+    if limit <= 0:
+        return "", NOTES_NOT_SHOWN
+    # Leave room for the system prompt, tool schemas, the verdict instructions and a few tool turns.
+    room = int((config.CONTEXT_TOKENS - max_output_tokens(role)) * config.CHARS_PER_TOKEN) - 9000
+    limit = min(limit, max(room, 0))
+    rows = tools.conn.execute(
+        "SELECT NoteID, NoteType, CreatedDateTime, NoteText FROM ClinicalNotes "
+        "WHERE LocalPatientIdentifier = ? ORDER BY CreatedDateTime DESC",
+        (tools.patient_id,),
+    ).fetchall()
+    shown, used = [], 0
+    for r in rows:
+        line = json.dumps({"table": "ClinicalNotes", "NoteID": r["NoteID"], "NoteType": r["NoteType"],
+                           "CreatedDateTime": r["CreatedDateTime"], "NoteText": r["NoteText"]},
+                          ensure_ascii=False, separators=(",", ":"))
+        if used + len(line) > limit:
+            break
+        shown.append(line)
+        used += len(line)
+    if not rows:
+        return "\nClinical notes for this patient: none recorded.", NOTES_SHOWN.format(more="")
+    if not shown:
+        return "", NOTES_NOT_SHOWN
+    hidden = len(rows) - len(shown)
+    more = f", or the {hidden} older notes not shown (search_notes)" if hidden else ""
+    header = f"\nClinical notes for this patient ({len(shown)} of {len(rows)}, newest first, full text):\n"
+    return header + "\n".join(shown), NOTES_SHOWN.format(more=more)
+
+
 def _pointer_block(tools: PatientTools, pointers: list[Citation]) -> str:
     """The ORIGINAL records stage 1 cited, fetched fresh from the warehouse by code."""
     seen, records = set(), []
@@ -123,13 +165,15 @@ def screen_criterion(
 ) -> Verdict:
     """Run the tool loop + verdict for one criterion and one patient. Always returns a Verdict."""
     summary = tools.patient_summary()
+    notes, notes_note = _notes_block(tools, role)
     system = SYSTEM_PROMPT.format(
         today=_today(),
         sex=summary.get("Sex", "unknown"),
         dob=summary.get("DateOfBirth", "unknown"),
+        notes_note=notes_note,
         role_note=SCREENER_NOTE if role == "screener" else VERIFIER_NOTE,
     )
-    user = f"Criterion ({criterion.type.value}): {criterion.description}"
+    user = f"Criterion ({criterion.type.value}): {criterion.description}" + notes
     if pointers:
         user += _pointer_block(tools, pointers)
     messages: list[dict] = [{"role": "system", "content": system}, {"role": "user", "content": user}]
