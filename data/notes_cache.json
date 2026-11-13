@@ -184,6 +184,11 @@
   "note_type": "ward round",
   "text": "WR Day 2 - 22/02/2026\n\n11F admitted with cough, s/p severe pneumonia. Pt now improving clinically. Alert and interactive. No new confusion.\n\nObs: RR 36, SpO2 98% on O2, HR 122, BP 92/58, T 37.9.\n\nLabs: No repeat bloods sent. Initial results consistent with infectious aetiology.\n\nImpression: Community-acquired pneumonia, child. Trajectory improving on current management. Respiratory rate remains elevated but oxygenation stable on supplemental O2. Tachycardia likely secondary to fever and work of breathing.\n\nPlan:\n1. Continue current antibiotic regimen as per local paediatric guidelines for CAP.\n2. Maintain supplemental oxygen to maintain SpO2 >94%.\n3. Monitor respiratory effort and work of breathing closely.\n4. Encourage oral fluid intake; review nutritional status.\n5. Reassess need for O2 weaning in 12-24 hours if RR decreases further.\n6. Discuss discharge planning with parents once off O2 and afebrile for 24h."
  },
+ "0c58936c22478f991ab43868c2ee2e04622001bcfbf41c51b42b54fd949bfd60": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "triage",
+  "text": "PC: Vomiting. Hx: Nausea, epigastric pain. PMH: HTN, T2DM, obesity. DH: amlodipine 5mg OD, metformin 500mg BD, gliclazide 80mg BD. NKDA. SH: Retired, lives alone, ~20u/wk. Obs: RR 19, SpO2 95% RA, HR 102, BP 128/77, T 37.8, alert. Category 2. Sent to majors. ?CAP, ?sepsis, ?biliary pathology."
+ },
  "0d0e45c2c97099b2759396d3e7b215b250ee53c42c9926c208a21f6f9f8a27d1": {
   "model": "qwen3.6:35b-a3b",
   "note_type": "clerking",
@@ -373,6 +378,11 @@
   "model": "qwen3.6:35b-a3b",
   "note_type": "clerking",
   "text": "PC: Cough x 3 days, SOB, pleuritic CP.\nHPC: 43F presents with acute onset productive cough and right-sided chest pain. Reports chills and rigors. No haemoptysis or leg swelling. Denies recent travel or sick contacts.\nPMH: Nil significant.\nDH: Nil regular meds.\nAllergies: NKDA.\nSH: Self-employed builder, lives alone. Independent ADLs. Never smoked. Alcohol ~10 units/wk.\nO/E: Alert, anxious. RR 24, SpO2 98% on O2 (was 93% RA). HR 99, BP 92/53, T 38.1. CV: tachycardic, regular, no murmurs. Resp: reduced air entry right base, coarse crackles bilat but louder R/L. No peripheral oedema. Neuro: GCS 15, no focal deficits.\nIx: Hb 125, WCC 14.1, Plt 191. Na 136, K 4.3. Ur 10.4, Cr 125, eGFR 47. CRP 227. Glu 5.7. Lactate 2.7. CXR requested. Blood cultures sent.\nImp: ?CAP with sepsis physiology. DDx: PE, atypical pneumonia, viral URI.\nPlan:\n1. Start empiric abx per CAP guidelines (amoxicillin + clarithromycin) once cultures drawn.\n2. IV fluids for hypotension and elevated lactate; monitor U&Es closely given eGFR 47.\n3. Supplemental O2 to maintain SpO2 94-98%.\n4. Repeat lactate in 6 hours.\n5. Review CXR results.\n6. Consider anticoagulation if PE suspected after imaging."
+ },
+ "1d3016f186f6e6499d921b72cd635caed028e9ded3a6812665c11a297246867a": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "ward round",
+  "text": "WR Day 3 (26/12)\n63M admitted with pleuritic CP. Dx ?CAP. Severe illness initially.\nObs: RR 28, SpO2 97% on O2, HR 98, BP 86/55, T 38.5. New confusion noted.\nLabs trend: CRP 210->166, WCC 19.4->15.6. Hb 159->150. Cr 143->138 (AKI improving). Na 136->135.\nImpression: Severe CAP with septic shock and delirium. Showing signs of clinical improvement but remains unstable. AKI resolving.\nPlan:\n1. Continue IV antibiotics per protocol. Review in AM.\n2. Fluids cautious given BP; monitor U&Es closely for AKI resolution.\n3. Delirium precautions: reorient, family support, minimize sedatives.\n4. DVT prophylaxis continued.\n5. Monitor respiratory status; consider escalation if RR/SpO2 worsens.\n6. Discuss goals of care with next of kin given severity and delirium."
  },
  "1d4bc9b25f8c67e1146f7f568d8c3ac164bb1f8f5858b00f5c9e63b37a737260": {
   "model": "qwen3.6:35b-a3b",
@@ -589,6 +599,11 @@
   "note_type": "ward round",
   "text": "WR Day 2 (03/07)\n82M admitted with pleuritic CP. Dx ?CAP.\nPt alert, moderate distress. RR 24, SpO2 98% on O2, HR 83, BP 102/61, T 37.7. No new confusion.\nLabs: CRP 142->143, WCC 13.7->13.5, Hb 146->141, Cr 127->121, Na 136->138. Trend stable/slight improvement in renal function.\nImpression: CAP, clinically improving but still tachypnoeic.\nPlan:\n1 Continue current abx regimen.\n2 Monitor obs qds.\n3 Encourage mobilisation with stick as tolerated.\n4 Review diet and fluid balance.\n5 Consider discharge planning if RR normalises and oral intake adequate."
  },
+ "340dcd56bbbe4938d9cb911fb90aab54c9408fbd7a7eb214b8c0140a4cfb9c32": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "clerking",
+  "text": "PC: Cough x 3 days, worsening SOB.\nHPC: 49F with h/o COPD/IHD presents with acute dyspnoea and productive cough. Reports increased sputum volume and purulence. No CP, no haemoptysis. Denies fever/chills. No new confusion. Symptoms progressive over 72h.\nPMH: COPD, IHD.\nDH: Trelegy Ellipta 1 puff OD; salbutamol 100mcg inh PRN; clopidogrel 75mg OD; atorvastatin 40mg ON; GTN spray PRN.\nAllergies: Penicillin (rash).\nSH: Admin, works from home, lives with partner. Independent. Ex-smoker, quit 5 yrs ago, occasional alcohol.\nO/E: Alert. Tachypnoeic. Bilateral wheeze on auscultation. No crackles. No peripheral oedema.\nObs on arrival: RR 26, SpO2 82% RA, HR 92, BP 125/78, T 37.1, alert.\nLatest obs: RR 27, SpO2 91% on O2, HR 102, BP 134/74, T 36.7, alert.\nIx: Hb 121, WCC 9.9, Plt 263, Na 136, K 4.3, Ur 6.3, Cr 70, eGFR >90, CRP 44, Glu 7.3. CXR requested. ECG done.\nImp: ?COPD exacerbation (severe). Ddx: CAP, PE, ACS.\nPlan:\n1. Continue O2 to maintain SpO2 88-92%.\n2. Nebulised salbutamol/ipratropium stat then QDS.\n3. Prednisolone 40mg OD x 5 days.\n4. Broad spectrum abx r/o CAP (avoid penicillins).\n5. Monitor obs q4h.\n6. Review CXR/ECG results."
+ },
  "3432b682e37e0581393dc59f9422b13781dc4eccf533396b834ac48a7986597a": {
   "model": "qwen3.6:35b-a3b",
   "note_type": "triage",
@@ -704,6 +719,11 @@
   "note_type": "ward round",
   "text": "WR Day 3 (14/09)\n75M admitted with confusion. Working dx UTI. Pt alert, moderate illness.\nObs: RR 20, SpO2 90% RA, HR 81, BP 126/72, T 37.1.\nLabs trending down: CRP 78->72, WCC 13.7->12.4. Hb 149->151. Cr improving 117->107. Na stable 139.\nImpression: Responding to abx for UTI. Mild hypoxia on RA likely due to underlying COPD. No new confusion noted.\nPlan:\n1 Continue current IV abx course.\n2 Monitor obs qds, target SpO2 >92%.\n3 Encourage oral fluids.\n4 Review mobility with physio; pt lives alone with od carers.\n5 Consider discharge if clinically stable and safe home support confirmed."
  },
+ "4025cf31c36f852dc91d3d18a4bf35f4a2c290488defe1fd23320af830aa2fd4": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "ward round",
+  "text": "WR Day 2. 72M with IHD/HF admitted SOB. Working dx ?CAP. Pt severe but improving. Alert, no confusion. Latest obs: RR 27, SpO2 93% on O2, HR 103, BP 92/58, T 38.1. CRP rising 183->274, WCC falling 19.5->16.2. Hb 142->140. Cr 156->153 (AKI). Na 136 stable. On CPAP. Impression: Severe CAP with acute respiratory failure and AKI. Trajectory slowly improving but still unwell. Plan:\n1. Continue current abx mx for CAP.\n2. Monitor renal function closely given AKI; avoid nephrotoxins.\n3. Wean O2 as tolerated, aim SpO2 94-98%.\n4. Review CPAP weaning plan daily.\n5. Encourage mobilisation with frame when stable.\n6. Continue cardiac meds (clopidogrel, atorvastatin, bisoprolol, ramipril, furosemide) as per protocol, monitor BP closely given hypotension."
+ },
  "402657b234a86e9389b0306df3c52e178ad62e5b10ca1f3b0c0097f078d74d19": {
   "model": "qwen3.6:35b-a3b",
   "note_type": "triage",
@@ -799,6 +819,11 @@
   "note_type": "ward round",
   "text": "WR Day 2 (05/11)\n91M admitted with SOB. Dx ?CAP. Moderate illness. Alert, no confusion.\nObs: RR 22, SpO2 98% on O2, HR 105, BP 112/67, T 37.7.\nLabs trend: CRP 204->174, WCC 14.1->11, Hb 147->144, Cr 179->165, Na 136->134. Improving trajectory.\nImpression: Community-acquired pneumonia, responding to current management. Dehydration resolving.\nPlan:\n1 Continue current IV abx.\n2 Monitor obs qds.\n3 Encourage oral intake as tolerated.\n4 Review discharge criteria when afebrile and stable off O2."
  },
+ "4c458668ef2bc668041168cc740b2c183c470bf1c88852d275f9756ac5058f0f": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "clerking",
+  "text": "PC: Fever\n\nHPC: 53F presents with fever and mild SOB x 3 days. No CP, no haemoptysis. Denies recent travel or sick contacts. No new confusion.\n\nPMH: HTN\n\nDH: Ramipril 5mg OD\n\nAllergies: NKDA\n\nSH: Admin. Works from home. Lives with partner. Independent ADLs. Ex-smoker. ~10 units/wk alcohol.\n\nO/E: Alert and oriented. No respiratory distress at rest. Chest auscultation reveals coarse crackles bilaterally, right base > left. No peripheral oedema. Cap refill <2s.\nObs on arrival: RR 23, SpO2 94% RA, HR 108, BP 111/62, T 37.6, alert.\nLatest obs: RR 23, SpO2 98% on O2, HR 100, BP 115/74, T 37.6, alert.\n\nIx: Bloods sent and results available. Hb 137, WCC 13.8, Plt 282, Na 136, K 3.9, Ur 8.7, Cr 90, eGFR 66, CRP 146, Glu 6.5. CXR requested to confirm consolidation. Blood cultures sent prior to abx.\n\nImp: ?CAP. Moderate severity. Ddx includes atypical pneumonia, viral URI, PE (less likely given fever/CRP). No evidence of AKI or electrolyte disturbance.\n\nPlan:\n1. Start empiric abx per CAP guidelines (amoxicillin + clarithromycin) once CXR confirms consolidation.\n2. Continue O2 to maintain SpO2 94-98%.\n3. Monitor obs q4h.\n4. Review CXR and bloods in AM.\n5. Encourage oral fluids if tolerated."
+ },
  "4ce94f4f6d84d0b26c031dd60758fccc634f6ee8c75cd70a938be2e055129a18": {
   "model": "qwen3.6:35b-a3b",
   "note_type": "triage",
@@ -838,6 +863,11 @@
   "model": "qwen3.6:35b-a3b",
   "note_type": "ward round",
   "text": "WR Day 2 (19/07)\n55F admitted with fever. Working dx ?CAP. Severe illness. New confusion noted.\nObs: RR 30, SpO2 91% on O2, HR 109, BP 78/44, T 38.4.\nLabs trend: CRP 285->232, WCC 17.4->17.3, Hb 139->137, Cr 98->94, Na 129->129. No new bloods sent yet.\nImpression: Severe CAP with septic shock physiology and delirium. Renal function stable but hyponatraemia persistent. Trajectory slowly improving but still critical.\nPlan:\n1. Continue IV abx per protocol for severe CAP.\n2. Fluid resuscitation ongoing; monitor U&Es closely given hyponatraemia and AKI risk.\n3. Review mental state daily; consider delirium screen if persists.\n4. Repeat obs q1h until stable.\n5. Reassess need for ICU escalation if BP/RR worsens."
+ },
+ "50bbb6ec10a7628afb06a731958d1ec7c6a9507f0efaf47e3ff041b3b52c9bbd": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "clerking",
+  "text": "PC: Vomiting x3 episodes bilious, RUQ pain radiating to back. Onset 12h ago. Associated with fever/chills. No h/o similar episodes.\n\nHPC: Pt presents via ED with acute onset severe RUQ colicky pain and persistent vomiting. Denies jaundice, pruritus, pale stools or dark urine. Reports chills but no rigors. Pain unrelieved by antacids. No chest pain or SOB. No recent travel or sick contacts.\n\nPMH: HTN, T2DM, obesity.\nDH: Amlodipine 5mg OD; Metformin 500mg BD; Gliclazide 80mg BD.\nAllergies: NKDA.\nSH: Retired, lives alone. Independent ADLs. Never smoked. Alcohol ~20 units/wk.\n\nO/E: Alert, comfortable at rest but grimaces with movement. Temp 37.4C (latest), HR 102, BP 137/80, RR 17, SpO2 95% RA. Abdomen soft, tender in RUQ with positive Murphy\u2019s sign. No guarding or rebound. Bowel sounds present. No palpable masses. Lungs clear bilat. CVS regular. Extremities warm, no oedema.\n\nIx: Hb 137, WCC 15.1, Plt 318. Na 139, K 4, Ur 5.3, Cr 76, eGFR 72. CRP 158. Bili 29, ALT 93, ALP 140. Amylase 40. Glu 9.2, Lactate 3.5. HbA1c 58. Bloods sent on arrival.\n\nImp: ?Acute cholecystitis. Supported by RUQ pain, fever, leukocytosis, elevated CRP and transaminitis.\nDDx: Biliary colic, pancreatitis (less likely given normal amylase), peptic ulcer disease.\n\nPlan:\n1. Admit to general surgery ward.\n2. NBM. IV fluids 1L NS over 4h then maintenance.\n3. IV antibiotics: Co-amoxiclav 1.2g TDS.\n4. Analgesia: Paracetamol 1g QDS, Morphine PCA if required.\n5. Monitor glucose q4h given T2DM and steroids not used but stress hyperglycemia possible. Hold oral hypoglycemics while NBM.\n6. Urgent USS abdomen to confirm diagnosis and assess for choledocholithiasis.\n7. Review in AM by registrar."
  },
  "510298cea42146f92871043753a179d33ce129652c57c0e5f8bb2675866bb2d6": {
   "model": "qwen3.6:35b-a3b",
@@ -904,6 +934,11 @@
   "note_type": "clerking",
   "text": "PC: Fever, SOB\nHPC: 87F presents with acute onset fever and worsening shortness of breath over 2 days. Reports productive cough with yellow sputum. No chest pain. No haemoptysis. No recent travel or sick contacts. Denies new leg swelling or orthopnoea. No confusion noted by family.\nPMH: HTN, COPD, HF\nDH: amlodipine 5mg OD; Fostair 100/6 2 puffs BD; tiotropium 18mcg OD; salbutamol 100mcg inh PRN; bisoprolol 5mg OD; ramipril 2.5mg OD; furosemide 40mg OM\nAllergies: NKDA\nSH: Lives alone, independent. Mobilises independently. Ex-smoker, quit 5 yrs ago, ~10 units/wk.\n\nO/E: Alert and oriented. RR 26, SpO2 92% on O2 (was 87% RA on arrival). HR 100, BP 117/66. T 37.5. Chest: reduced air entry bilaterally, coarse crackles at right base. No wheeze. Heart: regular rhythm, no murmurs. Peripheral: no oedema, cap refill <2s. Neuro: normal power and sensation.\n\nIx: Hb 136, WCC 13.6, Plt 373, Na 138, K 4, Ur 10.1, Cr 98, eGFR 48, CRP 157, Glu 6.7, Trop T 6. CXR requested. Blood cultures sent.\n\nImp: ?CAP. Moderate severity. DDx: HF exacerbation (less likely given clear lungs elsewhere and high CRP), PE (r/o if no improvement).\nPlan:\n1. Start empiric abx per CAP guidelines (amoxicillin + clarithromycin)\n2. Continue Fostair and tiotropium\n3. Monitor obs q4h, target SpO2 88-92%\n4. Review CXR results\n5. Encourage oral fluids if tolerated"
  },
+ "583768ab6b7ca0238f8445d8e9e8dc7eab9b76773107095ddfacb7bcccd114fe": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "ward round",
+  "text": "WR Day 2 (12/11)\n71F admitted with vomiting. Dx: cholecystitis.\nPt improving clinically. Alert, no confusion. Tolerating sips.\nObs: RR 18, SpO2 96% RA, HR 99, BP 133/85, T 37.3.\nLabs trending down: CRP 158->107, WCC 15.1->12.7. Hb 137->130. Cr 76->83 (stable), Na 139->141. No new issues identified.\nImpression: Acute cholecystitis responding to conservative management.\nPlan:\n1. Continue IV fluids and analgesia.\n2. Maintain nil by mouth until surgical review for interval cholecystectomy.\n3. Monitor obs qds.\n4. Repeat FBC/CRP daily to track inflammatory response.\n5. Review diet advancement if afebrile and pain controlled."
+ },
  "585f9d953661d67049bf69bf3eb1ca0f413d4d9a22a7c648be15472f3822ca6e": {
   "model": "qwen3.6:35b-a3b",
   "note_type": "ward round",
@@ -929,6 +964,11 @@
   "note_type": "clerking",
   "text": "PC: Diarrhoea\n\nHPC: 2F presents with acute onset diarrhoea. Parents report multiple loose stools over past 24 hours. No blood in stool reported. Mild vomiting x2 episodes this morning. Reduced oral intake. No recent travel or sick contacts identified at nursery. Denies abdominal pain on examination, though pt is irritable when palpated. No urinary symptoms.\n\nPMH: Nil significant\n\nDH: Nil regular\n\nAllergies: NKDA\n\nSH: Lives with parents. Attends local nursery. Immunisations up to date per Red Book. Dad smokes outside only. Social history non-contributory.\n\nO/E: Alert, responsive but irritable. Capillary refill <2s. Mucous membranes slightly dry. No oedema. Lungs clear bilat. Heart sounds normal, no murmurs. Abdomen soft, non-tender, no masses or organomegaly. Skin turgor mildly reduced. Neurological exam age-appropriate.\nObs on arrival: RR 31, SpO2 98% RA, HR 121, BP 79/47, T 37.6, alert\nLatest obs: RR 30, SpO2 98% RA, HR 115, BP 93/56, T 37.3, alert\n\nIx: Bloods sent/pending (FBC, CRP, U&E, Mg, Ca). Stool culture requested if symptoms persist >48h or blood present.\n\nImp:\n1. Acute gastroenteritis (likely viral aetiology) - moderate dehydration risk.\n2. Ddx: Bacterial enteritis, early appendicitis (less likely given exam), UTI.\n\nPlan:\n1. Oral rehydration therapy with Dioralyte. Encourage small frequent sips.\n2. Monitor fluid balance strictly. Input/output charting.\n3. Review obs q4h. Watch for signs of worsening dehydration or shock.\n4. Await blood results.\n5. Advise parents on hygiene measures to prevent spread at home/nursery.\n6. Discharge if oral intake tolerated and obs stable for 12h."
  },
+ "5b0adcfcdc8f73115c007fac37c55c3ff69757cb5bdf856e494b3711b201b756": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "clerking",
+  "text": "PC: Facial droop.\n\nHPC: 80M presents with acute onset right-sided facial weakness. No limb weakness reported. No speech difficulty or visual field defects noted by pt. Onset unclear, last known well approx 4 hours ago. No headache, no trauma, no fever. No new confusion.\n\nPMH: HTN.\nDH: Amlodipine 5mg OD.\nAllergies: NKDA.\nSH: Lives with husband. Mobilises independently. Never smoked, nil alcohol.\n\nO/E: Alert and oriented. Cranial nerves: Right lower motor neurone facial palsy (forehead sparing). Power 5/5 bilaterally in all groups. Tone normal. Reflexes 2+ bilat, plantars downgoing. Sensation intact to light touch and pinprick. Speech fluent, no dysarthria. Gait steady.\nObs on arrival: RR 16, SpO2 95% RA, HR 75, BP 145/86, T 36.7, alert.\nLatest obs: RR 14, SpO2 97% RA, HR 74, BP 154/97, T 36.3, alert.\n\nIx: Bloods sent and returned. Hb 158, WCC 8.1, Plt 198, Na 139, K 4.5, Ur 6.1, Cr 96, eGFR 69, CRP 4, Glu 7.1. CT head performed.\n\nImp:\n1. Acute ischaemic stroke (right MCA territory likely). ?TIA if symptoms resolved completely (currently persistent droop).\n2. Hypertension.\n\nPlan:\n1. Await CT head results to rule out haemorrhage.\n2. If no bleed and within window, discuss thrombolysis/thrombectomy with stroke team.\n3. Start aspirin 300mg daily if CT negative for bleed.\n4. Monitor obs q4h.\n5. Swallow screen before oral intake.\n6. Physio/OT referral for mobilisation assessment."
+ },
  "5ba066ce1a021089037b4bc48ee03fa49d893e9a3c4cfda9ced8da2f073487e1": {
   "model": "qwen3.6:35b-a3b",
   "note_type": "clerking",
@@ -953,6 +993,11 @@
   "model": "qwen3.6:35b-a3b",
   "note_type": "triage",
   "text": "PC: Cough x 2 days. No fever reported by parents. PMH nil significant. DH nil regular. Allergy: penicillin (rash). SH: Lives with parents, attends school. Immunisations up to date. Triage obs: RR 29, SpO2 96% RA, HR 113, BP 97/56, T 37.7, alert. Category 3. Sent to paeds ED. ?CAP vs viral URI. Monitor respiratory effort and oxygenation closely on arrival."
+ },
+ "5db586f577372e730b535af9e2e761f19ac5b5b3862e05cc32b5f36726544ec6": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "triage",
+  "text": "PC pleuritic CP. Hx asthma/IHD. Smoker, alcohol use. Obs: RR 29, SpO2 89% RA, HR 108, BP 80/44, T 38.9, new confusion. Triaged category 1 (immediate/red). Concern for sepsis or PE. Sent directly to resus bay for urgent review and resuscitation. NKDA."
  },
  "5dfc50f008979f8a9bc152fd409bacf15af65ed8298f7a27ff1e900deec371de": {
   "model": "qwen3.6:35b-a3b",
@@ -1208,6 +1253,11 @@
   "model": "qwen3.6:35b-a3b",
   "note_type": "clerking",
   "text": "PC: Melaena x3 episodes over 24h. Lightheadedness.\nHPC: 82M with h/o dementia and obesity presents via ED. Reports black, tarry stools. Denies haematemesis or abdominal pain. No recent NSAID use. No change in memantine. Last meal 12h ago.\nPMH: Dementia, obesity.\nDH: Memantine 10mg OD.\nAllergies: NKDA.\nSH: Lives in care home. Mobilises with frame. Never smoker. Drinks ~20 units/wk.\n\nO/E: Alert but anxious. Pale conjunctivae. Cap refill >3s. Abdomen soft, non-tender, no masses. No hepatosplenomegaly. No peripheral oedema. Neurological exam consistent with baseline dementia.\nObs on arrival: RR 24, SpO2 97% RA, HR 107, BP 87/54, T 36.2.\nLatest obs: RR 19, SpO2 96% RA, HR 102, BP 81/47, T 36.6.\n\nIx: Hb 102, WCC 8.5, Plt 194. Na 140, K 3.8. Ur 14, Cr 119, eGFR 52. CRP 4. Glu 8.6. Coagulation profile sent. Group and save x2 units. LFTs, U&E, FBC repeated q6h.\n\nImp:\n1. Acute upper GI bleed ?peptic ulcer disease vs variceal bleed. Haemodynamically unstable despite fluids.\n2. AKI likely prerenal secondary to hypovolaemia. Cr 119.\n3. Dementia.\n\nPlan:\n1. Admit to high dependency unit for close monitoring.\n2. IV fluid resuscitation with crystalloids. Target MAP >65.\n3. Crossmatch blood. Transfuse if Hb <70 or ongoing instability.\n4. Start IV PPI infusion (8mg bolus then 8mg/hr).\n5. Hold memantine temporarily due to acute illness and potential for delirium.\n6. GI review for urgent endoscopy within 24h once resuscitated.\n7. Monitor U&E and Cr q6h. Correct electrolytes if needed."
+ },
+ "6eca37b1b88c2a935588ffe5fa6d9f47fac8d8f56e44c890e36ccda8181ac2f3": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "triage",
+  "text": "PC: SOB. Hx: 72M with IHD/HF presents with acute breathlessness. PMH: IHD, HF. DH: clopidogrel, atorvastatin, GTN, bisoprolol, ramipril, furosemide. SH: lives alone, carers od, mobilises w frame. NKDA. Obs: RR 27, SpO2 90% RA, HR 101, BP 94/55, T 38.2, alert. Triaged category 2 (very urgent). Sent to majors for ?CAP vs acute HF exacerbation."
  },
  "6f35a1ace91b4464d1825c4476dc50b827200d81310e94ba1bd25caa320a3418": {
   "model": "qwen3.6:35b-a3b",
@@ -1654,6 +1704,11 @@
   "note_type": "triage",
   "text": "PC: Fever. Hx: raised temp x24h. PMH: HTN, asthma, obesity. DH: amlodipine, Clenil, salbutamol. NKDA. SH: bus driver, non-smoker. Obs: RR 19, SpO2 94% RA, HR 77, BP 131/83, T 37.1, alert. Triaged category 4. Sent to minors area. ?viral illness vs early CAP given asthma hx. Monitor obs closely."
  },
+ "9dc5669dce6e8ff656281639c13376f907192bcd5a3291f8ce41cdae2c1c641d": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "ward round",
+  "text": "WR Day 2 (23/02)\n80M admitted with facial droop. Working dx: stroke. Pt alert, improving clinically. No new confusion.\nObs: RR 18, SpO2 96% RA, HR 67, BP 147/84, T 36.5.\nLabs stable: CRP 4->4, WCC 8.1->8.1, Hb 158->159, Cr 96->89, Na 139->139.\nCT head performed. PMH HTN on amlodipine 5mg OD. NKDA. Lives with husband, independent mob.\n\nPlan:\n1 Continue current mx.\n2 Monitor neuro obs q4h.\n3 Assess for swallow screen prior to oral intake.\n4 Discuss discharge planning with MDT if stable.\n5 Repeat labs if clinical change."
+ },
  "9df354177d32836ee476dd19649387489784eef45d90e05d9d9166d1594a274a": {
   "model": "qwen3.6:35b-a3b",
   "note_type": "triage",
@@ -1693,6 +1748,11 @@
   "model": "qwen3.6:35b-a3b",
   "note_type": "clerking",
   "text": "PC: Chest pain\nHPC: 93F presents with acute onset central chest pain, radiating to left arm. Described as pressure-like, severe intensity. Onset approx 4 hours prior to arrival. Associated mild diaphoresis. No associated syncope or palpitations reported. Pain unrelieved by GTN spray taken pre-hospital.\nPMH: HTN, IHD, obesity\nDH: amlodipine 5mg OD; clopidogrel 75mg OD; atorvastatin 40mg ON; GTN spray PRN\nAllergies: NKDA\nSH: Lives alone, independent. Mobilises with stick. Never smoked, ~20 units/wk.\n\nO/E: Alert and oriented. No acute distress at rest. CVS: S1/S2 normal, no murmurs/rubs. Chest wall non-tender bilat. Lungs clear to auscultation. No peripheral oedema. Neuro: power 5/5 all limbs, sensation intact.\nObs on arrival: RR 20, SpO2 95% RA, HR 84, BP 162/97, T 36.9, alert\nLatest obs: RR 20, SpO2 96% RA, HR 94, BP 168/97, T 36.8, alert\n\nIx: Hb 128, WCC 7, Plt 373, Na 138, K 4.4, Ur 5.5, Cr 61, eGFR 81, CRP 2, Trop T 1156, Glu 8.7. ECG obtained showing ST depression in leads V4-V6. Troponin significantly elevated.\n\nImp:\n1. Acute coronary syndrome: nstemi - likely type 1 MI given risk factors and biomarker rise.\n2. Hypertensive urgency - BP remains elevated despite baseline meds.\n3. Hyperglycaemia - likely stress-related or undiagnosed DM.\n\nPlan:\n1. Admit to Cardiology ward for monitoring.\n2. Continue dual antiplatelet therapy; hold clopidogrel until angiography review if PCI indicated.\n3. Start IV heparin infusion per protocol.\n4. Repeat Tropon T in 3-6 hours to assess trend.\n5. Monitor glucose levels; consider sliding scale insulin if persistent >10.\n6. Analgesia as required; avoid NSAIDs.\n7. Review diet and discharge planning with social work given living alone."
+ },
+ "9f84bf2e8b4b13eb532be70cc3ea2d82fd2715258a8928e883682055af1e6e9f": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "triage",
+  "text": "PC SOB. 76M with hx AF, HTN, dementia. Smoker. Obs: RR 25, SpO2 91% RA, HR 114, BP 106/65, T 37.7. Alert. Triage cat 2 (orange). ?CAP vs acute HF exacerbation. Sent to majors for urgent review and further management."
  },
  "9fc824db12fcb78960bb3317c6991180e49f577e3e4405050ce666d52954e3ce": {
   "model": "qwen3.6:35b-a3b",
@@ -2114,6 +2174,11 @@
   "note_type": "clerking",
   "text": "PC: Fever\nHPC: 68F presents with fever and mild SOB. No CP, no haemoptysis. Nil new confusion. Denies dysuria or frequency but reports general malaise. Hx of COPD exacerbation in past year.\nPMH: HTN, COPD, CKD 3\nDH: amlodipine 10mg OD; indapamide 2.5mg OD; Fostair 100/6 2 puffs BD; tiotropium 18mcg OD; salbutamol 100mcg inh PRN\nAllergies: NKDA\nSH: Retired, lives with partner. Independent. Ex-smoker, 40 pack yrs, occasional alcohol.\n\nO/E: Alert and oriented. RR 20, SpO2 89% RA on arrival, improving to 90% RA on latest obs. HR 100 -> 94 bpm. BP 110/63 -> 114/72 mmHg. Temp 37.1C bilat. Chest: bilateral wheeze, no crackles. CV: S1S2 regular, no murmurs. Abdomen: soft, non-tender, no CVA tenderness. Limbs: no oedema, pulses palpable bilat.\n\nIx: Bloods sent. Hb 125 g/L, WCC 11.5 x10^9/L (elevated), Plt 221 x10^9/L. Na 140 mmol/L, K 4.5 mmol/L. Urea 13.3 mmol/L, Cr 151 umol/L, eGFR 32 mL/min/1.73m2 (consistent with CKD 3). CRP 45 mg/L (raised). Glu 5.5 mmol/L. Urinalysis requested. CXR r/o CAP.\n\nImp: ?UTI causing fever and tachycardia. Mild hypoxia likely secondary to COPD or deconditioning. No evidence of sepsis currently but WCC/CRP raised. Ddx: COPD exacerbation, atypical pneumonia, viral illness.\n\nPlan:\n1. Send MSU for culture and sensitivity.\n2. Start empiric abx (e.g., nitrofurantoin if eGFR allows, else adjust) pending urine results.\n3. Continue inhalers as per DH.\n4. Monitor obs q4h.\n5. Review renal function given elevated Urea/Cr; ensure hydration status adequate but cautious of fluid overload.\n6. Discharge planning if improving and oral abx tolerated."
  },
+ "c89e131c9bb98af4e0633237cfd97f6cbed7d7e751de56c4758f6827cb997daa": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "ward round",
+  "text": "WR Day 2 (21/08)\n49F with COPD/IHD admitted for cough. Severe exacerbation initially. Now improving clinically. Alert, no confusion.\nObs: RR 24, SpO2 88% on O2, HR 101, BP 124/75, T 36.9.\nLabs trend: CRP 44->35, WCC 9.9->9.5. Hb 121->125. Cr 70->68. Na 136->135. Inflammatory markers falling. Renal function stable.\nImpression: COPD exacerbation responding to therapy. No evidence of pneumonia or cardiac decompensation currently.\nPlan:\n1. Continue current respiratory regimen including Trelegy and salbutamol. Monitor O2 saturations closely.\n2. Review oxygen weaning protocol as RR improves.\n3. Repeat bloods tomorrow to confirm continued downward trend in CRP/WCC.\n4. Encourage mobilization as tolerated.\n5. Maintain clopidogrel and atorvastatin for IHD.\n6. Discharge planning if stable for 24h."
+ },
  "c8c395672a03d87a7f2e6ccff3a85b0e10a64574ccc4bfa62f6af59fe65fe93b": {
   "model": "qwen3.6:35b-a3b",
   "note_type": "triage",
@@ -2133,6 +2198,11 @@
   "model": "qwen3.6:35b-a3b",
   "note_type": "ward round",
   "text": "WR Day 2 (19/12)\n73M admitted with fever. Working dx ?CAP. Pt mild, alert, no new confusion. Lives alone, ex-smoker.\nObs: RR 19, SpO2 88% RA, HR 84, BP 133/84, T 37.4.\nLabs trend: CRP 84->86, WCC 11.4->10.4, Hb 154->156, Cr 125->125, Na 136->134. Stable renal function.\nImpression: Improving CAP. SpO2 remains low on RA despite clinical improvement. No new issues identified.\nPlan:\n1. Continue current abx regimen.\n2. Review oxygen requirement; consider ambulatory oximetry to assess need for discharge O2.\n3. Encourage mobilisation as tolerated.\n4. Monitor CRP trend daily.\n5. Reassess for discharge if SpO2 stabilises >92% on RA and pt remains clinically well."
+ },
+ "ca1c1c2f6f11ac8257b95d4bca5a012f8613ad43d8e14d023f543244ba903901": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "ward round",
+  "text": "WR Day 2 (06/09/2026)\n53F admitted with fever. Working dx ?CAP. Pt moderate illness, improving clinically. Alert, no confusion.\nObs: RR 21, SpO2 98% on O2, HR 96, BP 105/60, T 37.1.\nLabs trend: CRP 146->142, WCC 13.8->12.3. Hb 137->136. Cr 90->93 (stable). Na 136->137. No new electrolyte derangement.\nImpression: Community-acquired pneumonia, responding to current management. Mild AKI likely pre-renal/dehydration given Cr rise but stable trend.\nPlan:\n1. Continue current IV abx and fluids.\n2. Monitor obs q4h.\n3. Repeat FBC/CRP in 24-48h to assess response.\n4. Encourage mobilisation as tolerated.\n5. Review discharge criteria when afebrile for 48h and oral intake adequate."
  },
  "ca1c9d6db0b51dc4a98dc474295cbd492ad766f7a13ff123a8f992f41c4dcdb3": {
   "model": "qwen3.6:35b-a3b",
@@ -2524,6 +2594,11 @@
   "note_type": "ward round",
   "text": "WR Day 2 (28/12)\n58M admitted with pleuritic CP. Working dx ?CAP. Pt feels better, no new confusion. Alert and oriented.\nObs: RR 22, SpO2 98% on O2, HR 84, BP 113/68, T 37.1.\nLabs trending down: CRP 137->99, WCC 13.7->11.8. Hb stable 145->146. Renal function preserved (Cr 93->91), Na 138->137. No new issues identified.\nImpression: Improving CAP.\nPlan:\n1 Continue current IV abx, review for switch to oral if afebrile >24h.\n2 Monitor obs qds.\n3 Encourage mobilisation and incentive spirometry.\n4 Review CXR findings when available.\n5 Discuss discharge planning with family if clinical stability persists."
  },
+ "ec7df1c245b0e0cf7cd55c94e8c7da3c829494475323525a8c622d810019b59e": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "triage",
+  "text": "PC: Facial droop. Hx: Sudden onset right-sided facial weakness. PMH: HTN. DH: Amlodipine 5mg OD. SH: Lives with husband, mobilises independently. NKDA. Obs: RR 16, SpO2 95% RA, HR 75, BP 145/86, T 36.7, alert. Triage cat 2 (very urgent/orange). ?Stroke. Sent to majors for urgent assessment."
+ },
  "ecd1f95f1cf0ee81f18497cf01e5e5a1d93358a0d103ac01ba523d93b4e56540": {
   "model": "qwen3.6:35b-a3b",
   "note_type": "clerking",
@@ -2593,6 +2668,16 @@
   "model": "qwen3.6:35b-a3b",
   "note_type": "clerking",
   "text": "PC: Fever\nHPC: 63F presents with fever and worsening SOB over 48h. No h/o recent travel or sick contacts. Denies CP, haemoptysis, or leg swelling. No new confusion noted. PMH: T2DM. DH: metformin 1g BD. Allergies: penicillin (rash). SH: Teacher, lives with partner. Independent. Never smoked, ~10 units/wk.\nO/E: Alert. RR 25 -> 24. SpO2 91% RA -> 98% on O2. HR 94 -> 100. BP 100/65 -> 83/49. T 38.0 -> 37.9. Chest: reduced air entry bilat, basal crackles r > l. No peripheral oedema. Neuro intact.\nIx: Hb 125, WCC 14.9, Plt 296. Na 135, K 4.3. Ur 9.2, Cr 103, eGFR 53. CRP 164. Glu 11.7. Lactate 2.9. Blood cultures sent. CXR requested.\nImp: ?CAP with sepsis physiology. DDx: PE, atypical pneumonia, viral URI.\nPlan:\n1. Admit to Respiratory Medicine for monitoring.\n2. Start IV fluids for hypotension and elevated lactate.\n3. Commence abx: doxycycline 100mg OD + clarithromycin 500mg BD (penicillin allergy).\n4. Monitor obs q4h, strict fluid balance.\n5. Repeat lactate in 6h to assess response.\n6. Review CXR results and adjust therapy accordingly.\n7. Continue metformin with caution given renal function and acute illness; hold if contrast scan required or worsening AKI."
+ },
+ "f20272b28b7603bb08fe60d57cb72a619a37054794ae8e24c52f42133170f6db": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "clerking",
+  "text": "PC: Pleuritic chest pain, SOB\nHPC: 63M presents with acute onset pleuritic CP and worsening SOB. Reports fever and rigors x24h. New confusion noted by family prior to arrival. Denies haemoptysis or leg swelling. No recent travel or sick contacts.\n\nPMH: Asthma, IHD\nDH: Clenil 100mcg 2 puffs BD; salbutamol 100mcg inh PRN; aspirin 75mg OD; atorvastatin 80mg ON; GTN spray PRN\nAllergies: NKDA\nSH: Self-employed builder, lives alone. Independent. Ex-smoker, ~20 units/wk.\n\nO/E: Alert but confused. Severe respiratory distress. RR 31, SpO2 95% on O2. HR 111, BP 79/51. T 39.2. Reduced air entry bilat, basal crackles r/l. No peripheral oedema. Cap refill >4s.\n\nIx: Hb 159, WCC 19.4, Plt 443. Na 136, K 4.2. Ur 15.8, Cr 143, eGFR 47. CRP 210. Glu 7.2. Lactate 3.9. Blood cultures sent. CXR requested.\n\nImp: ?CAP with septic shock. Ddx: PE, ACS, asthma exacerbation. Acute renal failure (Cr 143, eGFR 47) likely pre-renal secondary to hypotension/dehydration. Delirium likely multifactorial (infection, hypoxia).\n\nPlan:\n1. Sepsis six protocol initiated. IV fluids bolus 500ml crystalloid, repeat if MAP <65.\n2. Broad spectrum abx: co-amoxiclav + clarithromycin STAT.\n3. High flow O2 to maintain SpO2 94-98%.\n4. Monitor U&Es q6h given AKI.\n5. Review in 1 hour for response to fluids/abx."
+ },
+ "f292ba7930e6edf0aa7828f7d3757b9f1cd8afb6ea5d231a29c30950877ae50d": {
+  "model": "qwen3.6:35b-a3b",
+  "note_type": "ward round",
+  "text": "WR Day 2 (05/06/26)\n76M admitted with SOB. Working dx aspiration pneumonia. Pt moderate illness, alert but tachypnoeic.\nObs: RR 27, SpO2 98% on O2, HR 107, BP 99/57, T 37.5.\nLabs trend: CRP rising 148->175, WCC 14.6->16.1. Hb 149->146. Cr improving 138->129. Na stable 134->135. No new confusion.\nImpression: Inflammatory response peaking but renal function recovering. Clinical trajectory improving despite lab lag.\nPlan:\n1 Continue current abx regimen.\n2 Monitor obs qds, target RR <20.\n3 Encourage oral intake as tolerated.\n4 Review swallow screen prior to discharge planning.\n5 Discuss goals of care with wife."
  },
  "f2f3252de197e08f51c2dd523e4dc16c783c0fef952e74c7e21212d2d4d58cac": {
   "model": "qwen3.6:35b-a3b",
