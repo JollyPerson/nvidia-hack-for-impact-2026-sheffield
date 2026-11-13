@@ -149,6 +149,29 @@ def test_stop_on_exclusion_flag(conn, monkeypatch):
     assert {a.criterion_id: a.stage1 for a in r.assessments}["C1"] is None
 
 
+def _cite(table, rid, field, quote):
+    return {"table": table, "record_id": rid, "field": field, "quote": quote}
+
+
+def test_not_met_from_structured_absence_becomes_insufficient(conn):
+    # What qwen3.6 did on P005 C2: not_met citing diagnoses + observations only.
+    bad = json.dumps({"reasoning": "COPD not in diagnoses; obs on room air", "basis": "direct_evidence",
+                      "verdict": "not_met",
+                      "citations": [_cite("Diagnoses", "D-5001", "Description", "Other abnormalities of gait"),
+                                    _cite("Observations", "O-5001", "OnOxygen", "0")]})
+    fake = ScriptedClient([response(content="done"), response(content=bad)])
+    v = screen_criterion(LLM(fake), PatientTools(conn, "P005"), STUDY.criteria[1], "verifier")
+    assert v.verdict == VerdictValue.insufficient and v.citations
+
+
+def test_not_met_with_note_is_kept(conn):
+    ok = json.dumps({"reasoning": "explicitly not on home O2", "basis": "direct_evidence", "verdict": "not_met",
+                     "citations": [_cite("ClinicalNotes", "N-4001", "NoteText", "NOT on home oxygen")]})
+    fake = ScriptedClient([response(content="done"), response(content=ok)])
+    v = screen_criterion(LLM(fake), PatientTools(conn, "P004"), STUDY.criteria[1], "verifier")
+    assert v.verdict == VerdictValue.not_met
+
+
 def test_verdict_schema_puts_verdict_last():
     assert list(llm_mod.VERDICT_SCHEMA["properties"])[-1] == "verdict"
 

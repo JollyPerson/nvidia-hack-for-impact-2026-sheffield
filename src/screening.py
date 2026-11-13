@@ -56,7 +56,8 @@ SCREENER_NOTE = "Be thorough: missing a real match is worse than flagging one fo
 
 VERIFIER_NOTE = (
     "You are an independent second reviewer. Read the records yourself and reach your own conclusion. "
-    "Records another reviewer pointed to may be wrong or irrelevant."
+    "Records another reviewer pointed to may be wrong or irrelevant. "
+    "Be strict: if no record explicitly answers the criterion, the answer is insufficient."
 )
 
 VERDICT_INSTRUCTIONS = """Now give your verdict on the criterion as ONE JSON object and nothing else:
@@ -71,6 +72,8 @@ Rules:
   "CXR: clear lung fields". A record that simply does not mention the topic is NOT evidence of not_met.
 - insufficient = no record directly answers it: nothing relevant found, only unrelated notes, conflicting,
   or uncertain ("?", "query", "possible", "awaited"). Absence of evidence is insufficient. Never guess.
+- A missing diagnosis code, normal vital signs, or "on room air" during this admission do NOT show that a
+  condition or treatment is absent. not_met needs a NOTE that explicitly says so.
 - basis = "direct_evidence" only if a cited quote itself states the answer; otherwise "nothing_found".
 - {type_rule}
 - met and not_met MUST cite at least one record you actually saw. Copy quotes exactly; do not paraphrase.
@@ -150,7 +153,7 @@ def screen_criterion(
         messages.append(
             {"role": "user", "content": VERDICT_INSTRUCTIONS.format(type_rule=TYPE_RULES[criterion.type])}
         )
-        verdict = llm.verdict(role, messages)
+        verdict = enforce_negative_evidence(llm.verdict(role, messages))
     except PromptTooLong as e:
         verdict = Verdict(verdict=VerdictValue.insufficient, reasoning=f"prompt too long: {e}")
     except openai.OpenAIError as e:
@@ -170,6 +173,22 @@ def screen_criterion(
             }
         )
     return verdict
+
+
+def enforce_negative_evidence(v: Verdict) -> Verdict:
+    """Code rule: a negative needs an explicit statement in a clinical note.
+
+    For a notes criterion, `not_met` must cite at least one ClinicalNotes record.
+    A condition missing from the coded diagnoses, or normal observations, never
+    proves it absent, so such a verdict becomes `insufficient`.
+    """
+    if v.verdict != VerdictValue.not_met or any(c.table == "ClinicalNotes" for c in v.citations):
+        return v
+    return Verdict(
+        verdict=VerdictValue.insufficient,
+        reasoning="[code: not_met cited no clinical note, so -> insufficient] " + v.reasoning,
+        citations=v.citations,
+    )
 
 
 def _excluded_by(v: Verdict | None, c: Criterion) -> bool:
