@@ -12,7 +12,7 @@ from src.models import (
     PatientResult,
     Verdict,
 )
-from src.validation import check_citation, validate_patient
+from src.validation import check_citation, check_citations, validate_patient
 
 SCHEMA = Path(__file__).resolve().parent.parent / "data" / "schema.sql"
 
@@ -44,6 +44,13 @@ def conn():
             '2026-10-01T08:40:00');
 
         INSERT INTO Diagnoses VALUES ('D1', 'E1', 'P1', 'J18.9', 'Pneumonia, unspecified', 'primary');
+
+        -- A full obs set and a urea, for recalculating scores. Worked out by hand:
+        -- CURB-65 = 5: confused (C), urea 9.1 > 7, RR 32 >= 30, SBP 88 < 90, age 76 >= 65.
+        -- NEWS2 = 15: RR 32 (3), SpO2 91 (3, scale 1: <=91), air (0), SBP 88 (3), HR 112 (2),
+        --             new confusion (3), T 38.4 (1).
+        INSERT INTO Observations VALUES ('O2', 'E1', 'P1', '2026-10-01T08:15:00', 32, 91, 0, 38.4, 88, 55, 112, 'C');
+        INSERT INTO Pathology VALUES ('L2', 'E1', 'P1', 'UREA', 'Urea', 9.1, 'mmol/L', 2.5, 7.8, '2026-10-01T08:40:00');
         """
     )
     yield db
@@ -100,6 +107,58 @@ def test_genuine_citation_passes(conn, citation):
 )
 def test_bad_citation_fails(conn, citation, reason):
     assert check_citation(conn, citation, "P1") == reason
+
+
+# --- prefilter evidence (src/prefilter.py): scores, empty fields, short codes --
+
+
+CURB65_BUNDLE = [  # the three citations the prefilter gives for a CURB-65 criterion
+    cite("Observations", "O2", "CURB65", "5"),
+    cite("Pathology", "L2", "Value", "9.1"),
+    cite("Patients", "P1", "DateOfBirth", "1950-03-02"),
+]
+
+
+def test_prefilter_curb65_bundle_passes(conn):
+    assert check_citations(conn, CURB65_BUNDLE, "P1") == []
+
+
+@pytest.mark.parametrize(
+    "citation, siblings, reason",
+    [
+        (cite("Observations", "O2", "CURB65", "3"), CURB65_BUNDLE, "quote does not match the recalculated score"),
+        (cite("Observations", "O2", "CURB65", "5"), [], "score cannot be recalculated from the records"),
+        # the "urea" next to it is really a CRP result, so the score can't be checked
+        (cite("Observations", "O2", "CURB65", "5"), [cite("Pathology", "L1", "Value", "145")],
+         "score cannot be recalculated from the records"),
+        (cite("Observations", "O1", "NEWS2", "5"), [], "score cannot be recalculated from the records"),  # no temp
+        (cite("Observations", "O2", "NEWS2", "9"), [], "quote does not match the recalculated score"),
+    ],
+)
+def test_wrong_or_unprovable_score_fails(conn, citation, siblings, reason):
+    assert check_citation(conn, citation, "P1", siblings=siblings) == reason
+
+
+def test_news2_is_recalculated(conn):
+    assert check_citation(conn, cite("Observations", "O2", "NEWS2", "15"), "P1") is None
+
+
+def test_empty_quote_for_empty_field(conn):
+    # The prefilter cites "" for a NULL DischargeDateTime (patient not yet discharged).
+    assert check_citation(conn, cite("Inpatients", "E1", "DischargeDateTime", ""), "P1") is None
+    assert check_citation(conn, cite("Inpatients", "E1", "DischargeDateTime", "2026-10-05"), "P1") == (
+        "field is missing or empty"
+    )
+
+
+def test_short_exact_values(conn):
+    assert check_citation(conn, cite("Patients", "P1", "Sex", "F"), "P1") is None
+    assert check_citation(conn, cite("Patients", "P1", "Sex", "M"), "P1") == "quote does not match the record"
+
+
+def test_rounded_number_passes(conn):
+    # prefilter writes values with f"{v:g}"; 145.0 becomes "145"
+    assert check_citation(conn, cite("Pathology", "L1", "Value", "145"), "P1") is None
 
 
 # --- validate_patient: flags, never removes ----------------------------------
