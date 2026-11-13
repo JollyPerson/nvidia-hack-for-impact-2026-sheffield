@@ -6,8 +6,9 @@ Do not change this file without explicit approval (see AGENTS.md).
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from enum import Enum
+from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -201,3 +202,54 @@ class PatientResult(BaseModel):
     status: FinalStatus = FinalStatus.needs_review
     reasons: list[str] = Field(default_factory=list)  # e.g. exclusion reasons
     approved: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Stored screening state (app.db)
+#
+# None of these hold patient details (age, sex, contacts): only the
+# LocalPatientIdentifier. Details stay in the warehouse and are read when a
+# page is displayed.
+# ---------------------------------------------------------------------------
+
+
+class ScreeningRun(BaseModel):
+    """One run of the pipeline for one study, with its funnel counts and results."""
+
+    run_id: str
+    study_id: str
+    status: Literal["running", "complete", "failed"] = "running"
+    started_at: datetime
+    finished_at: datetime | None = None
+
+    # Funnel counts (AGENTS.md results view)
+    candidates_after_sql: int = Field(default=0, ge=0)
+    shortlisted_stage1: int = Field(default=0, ge=0)
+    confirmed_stage2: int = Field(default=0, ge=0)
+    likely_eligible: int = Field(default=0, ge=0)
+    needs_review: int = Field(default=0, ge=0)
+    excluded: int = Field(default=0, ge=0)
+
+    patients: list[PatientResult] = Field(default_factory=list)
+
+
+class Decision(BaseModel):
+    """A clinician's decision on one patient in one run. Later decisions supersede earlier ones."""
+
+    patient_id: str  # LocalPatientIdentifier (MRN)
+    run_id: str
+    decision: Literal["pending", "approved", "rejected"]
+    note: str = ""
+    who: str
+    when: datetime
+
+
+class AuditEntry(BaseModel):
+    """One line of the append-only audit log."""
+
+    when: datetime
+    study_id: str
+    who: str
+    action: str  # e.g. "study_created", "run_started", "decision_recorded"
+    patient_id: str = ""
+    note: str = ""

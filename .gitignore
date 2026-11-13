@@ -13,6 +13,10 @@ env/
 
 # Generated warehouse (rebuild with: python data/generate.py)
 data/*.db
+
+# Application database: studies, runs, decisions, audit log
+# (rebuild with: python data/seed_studies.py)
+data/app.db
 data/*.db-journal
 data/*.db-wal
 data/*.db-shm
