@@ -12,7 +12,11 @@ import time
 
 import streamlit as st
 
+import json
+from datetime import datetime
+
 import mock_data as data
+import standards
 
 st.set_page_config(page_title="TrialMatch", page_icon=None, layout="wide")
 
@@ -147,7 +151,7 @@ details.nhs-details code, .nhs-code{font-family:monospace; font-size:16px; backg
 *:focus-visible{outline:4px solid var(--focus) !important; outline-offset:0 !important; box-shadow:0 4px 0 var(--focus-text) !important;}
 
 /* Form fields */
-.stTextInput label p, .stNumberInput label p, .stSelectbox label p, .stRadio > label p, .stToggle label p{font-size:19px !important; color:var(--text) !important;}
+.stTextInput label p, .stNumberInput label p, .stSelectbox label p, .stSlider label p, .stMultiSelect label p, .stRadio > label p, .stToggle label p{font-size:19px !important; color:var(--text) !important;}
 [data-baseweb="input"], [data-baseweb="select"] > div{border:2px solid var(--input-border) !important; border-radius:0 !important; background:var(--white) !important;}
 [data-baseweb="input"]:focus-within, [data-baseweb="select"] > div:focus-within{outline:4px solid var(--focus) !important; box-shadow:inset 0 0 0 2px var(--text) !important;}
 input{background:var(--white) !important; color:var(--text) !important; font-size:19px !important;}
@@ -236,6 +240,16 @@ ss.setdefault("decisions", {})
 ss.setdefault("page", "trial")
 ss.setdefault("my_trials", [])
 ss.setdefault("draft", None)
+ss.setdefault("audit", [])
+
+
+def now():
+    d = datetime.now()
+    return f"{d.day} {d:%B %Y}, {d:%I:%M}".replace(", 0", ", ") + d.strftime("%p").lower()
+
+
+def log(action, who="You", patient="", note=""):
+    ss.audit.insert(0, {"When": now(), "Who": who, "Action": action, "Patient": patient, "Note": note})
 
 trials = ss.my_trials + data.get_trials()
 stats = data.STATS
@@ -357,6 +371,7 @@ if ss.page == "create":
                 new = {"id": f"LOCAL-{len(ss.my_trials) + 1:04d}", "title": d["name"], "sponsor": "Created on this device",
                        "phase": "Not registered", "target": d["target"], "eligibility_text": d["text"], "local": True}
                 ss.my_trials.insert(0, new)
+                log(f"Created trial {new['id']} from a description ({len(d['criteria'])} criteria)")
                 ss.pending_pick = f"{new['id']}: {new['title']}"
                 ss.page, ss.ran, ss.autorun, ss.draft = "trial", False, True, None
                 st.rerun()
@@ -387,6 +402,7 @@ if go:
             time.sleep(0.6)
         status.update(label=f"Finished in {stats['runtime_s']} seconds. No data left this device.", state="complete", expanded=False)
     ss.ran = True
+    log(f"Searched 200 patients for {trial['id']}. 12 likely eligible.", who="TrialMatch agent")
 
 # ---------- Summary cards ----------
 if ss.ran:
@@ -400,7 +416,7 @@ if ss.ran:
         f'<div class="nhs-card nhs-card--stat{" nhs-card--device" if i == 4 else ""}"><div class="label">{l}</div>'
         f'<div class="value">{v}</div><div class="hint">{h}</div></div>' for i, (l, v, h) in enumerate(cards)) + '</div>')
 
-tab_crit, tab_trace, tab_list, tab_review = st.tabs(["Criteria", "Agent steps", "Shortlist", "Review queue"])
+tab_crit, tab_trace, tab_list, tab_review, tab_log = st.tabs(["Criteria", "Agent steps", "Shortlist", "Review queue", "Screening log"])
 
 # ---------- 1. Criteria ----------
 with tab_crit:
@@ -417,13 +433,37 @@ with tab_crit:
     with right:
         rows = "".join(
             f'<tr><td><strong>{c["id"]}</strong></td><td>{html.escape(c["text"])}'
-            f'{"<br><span class=nhs-secondary style=font-size:16px>Rule: " + rule_text(c) + "</span>" if rule_text(c) else ""}</td>'
+            f'{"<br><span class=nhs-secondary style=font-size:16px>Rule: " + rule_text(c) + "</span>" if rule_text(c) else ""}'
+            f'<br><span class=nhs-secondary style=font-size:16px>SNOMED CT {data.SNOMED[c["id"]][0]} · {data.SNOMED[c["id"]][1]}</span></td>'
             f'<td>{type_tag(c)}</td><td>{method_tag(c)}</td></tr>' for c in criteria)
         md('<table class="nhs-table"><caption>Criteria found by the agent</caption>'
            '<thead><tr><th>ID</th><th>Criterion</th><th>Type</th><th>Checked using</th></tr></thead>'
            f'<tbody>{rows}</tbody></table>'
            '<p class="nhs-body-s nhs-secondary" style="margin-top:16px">2 criteria are checked against the patient record. '
-           '6 need the GP notes to be read by the model on this device.</p>')
+           '6 need the GP notes to be read by the model on this device. SNOMED CT codes are shown so criteria '
+           'can be matched to coded GP records. The codes are examples and must be checked before real use.</p>')
+        st.download_button("Download criteria as FHIR (JSON)", json.dumps(standards.to_fhir(trial, criteria), indent=2),
+                           f"{trial['id']}-fhir.json", help="HL7 FHIR R5 ResearchStudy with a Group of eligibility criteria.")
+
+    md('<h2 class="nhs-heading-m" style="margin-top:32px">What if you changed the criteria?</h2>'
+       '<p class="nhs-body">See how many more patients would be eligible if a criterion were relaxed or removed. '
+       'This reuses the answers the agent already has, so it does not read the notes again.</p>')
+    w1, w2 = st.columns([1.4, 1], gap="large")
+    with w1:
+        bmi_max = st.slider("Highest BMI allowed (C2)", 30, 45, 35)
+        age_min = st.select_slider("Youngest age allowed (C1)", options=[16, 18, 25, 30, 40], value=18)
+        dropped = st.multiselect("Remove these criteria", [f'{c["id"]}: {c["text"]}' for c in criteria if c["kind"] == "free_text"],
+                                 placeholder="Choose criteria to remove")
+    with w2:
+        base = data.WHATIF_BASE
+        n = data.whatif(bmi_max, age_min, [x.split(":")[0] for x in dropped])
+        diff = n - base
+        change = "no change" if diff == 0 else (f"{diff} more" if diff > 0 else f"{-diff} fewer")
+        md(f'<div class="nhs-card nhs-card--stat" style="border-top:4px solid var(--blue)"><div class="label">Likely eligible</div>'
+           f'<div class="value">{base} → {n}</div><div class="hint">{change} than the current criteria</div></div>')
+        if diff > 0:
+            md('<div class="nhs-inset" style="margin-top:0">Changing eligibility criteria needs approval from the sponsor and '
+               'ethics committee. Use this to support that conversation, not to change who is screened today.</div>')
 
 # ---------- 2. Agent steps ----------
 with tab_trace:
@@ -542,9 +582,13 @@ with tab_review:
                          else tag("Rejected", "tag-red") if d == "rejected" else tag("Waiting for a decision", "tag-blue"))
                 md(f'<h3 class="nhs-heading-xs">Your decision</h3><p class="nhs-body">{state}</p>')
                 if st.button("Approve for contact", key=f"ap_{r['patient_id']}", type="primary", use_container_width=True):
-                    ss.decisions[r["patient_id"]] = "approved"; st.rerun()
+                    ss.decisions[r["patient_id"]] = "approved"
+                    log("Approved for contact", patient=r["patient_id"], note=ss.get(f"why_{r['patient_id']}", ""))
+                    st.rerun()
                 if st.button("Reject", key=f"rj_{r['patient_id']}", use_container_width=True):
-                    ss.decisions[r["patient_id"]] = "rejected"; st.rerun()
+                    ss.decisions[r["patient_id"]] = "rejected"
+                    log("Rejected", patient=r["patient_id"], note=ss.get(f"why_{r['patient_id']}", ""))
+                    st.rerun()
                 st.text_input("Note (optional)", key=f"why_{r['patient_id']}", help="Saved to the audit log with your decision.")
 
             md('<h2 class="nhs-heading-m" style="margin-top:16px">Evidence for each criterion</h2>')
@@ -568,5 +612,39 @@ with tab_review:
                 md(f'<div class="nhs-card" style="padding:24px;margin-bottom:16px;{border}">'
                    f'<h3 class="nhs-heading-xs">{cid}: {html.escape(c["text"])}</h3>'
                    f'<div>{type_tag(c)}{result}<span class="nhs-body-s nhs-secondary">Confidence {ev["confidence"]*100:.0f}%</span></div>{body}</div>')
+
+# ---------- 5. Screening log ----------
+with tab_log:
+    md('<h2 class="nhs-heading-m">Screening log</h2>'
+       '<p class="nhs-body">Good clinical practice (ICH E6) expects a record of every patient screened, the outcome and the reason. '
+       'TrialMatch keeps this log for you on this device.</p>')
+    if not ss.ran:
+        md('<div class="nhs-inset">Find eligible patients first. The screening log will appear here.</div>')
+    else:
+        rows, csv = "", ["patient_id,screened,outcome,reason,decision"]
+        for r in results:
+            outcome = "Excluded" if r.get("excluded") else "Shortlisted"
+            dec = {"approved": "Approved for contact", "rejected": "Rejected"}.get(ss.decisions.get(r["patient_id"]),
+                                                                                     "Not needed" if r.get("excluded") else "To review")
+            rows += (f'<tr><td><strong>{r["patient_id"]}</strong></td><td>{tag(outcome, "tag-red" if r.get("excluded") else "tag-blue")}</td>'
+                     f'<td style="font-size:16px;line-height:24px">{html.escape(r["explanation"])}</td><td>{dec}</td></tr>')
+            csv.append(f'{r["patient_id"]},13 November 2026,{outcome},"{r["explanation"]}",{dec}')
+        md('<div class="nhs-card" style="padding:24px 32px"><table class="nhs-table">'
+           '<caption>Patients checked for this trial</caption>'
+           '<thead><tr><th>Patient</th><th>Outcome</th><th>Reason</th><th>Decision</th></tr></thead>'
+           f'<tbody>{rows}</tbody></table>'
+           '<p class="nhs-body-s nhs-secondary" style="margin:16px 0 0">Showing the 8 patients with notes evidence. '
+           'The full log also lists the 63 ruled out by the SQL record checks , the 96 ruled out by notes screening and the 29 not shortlisted in the final review.</p></div>')
+        st.download_button("Download screening log (CSV)", "\n".join(csv), f"{trial['id']}-screening-log.csv")
+
+    md('<h2 class="nhs-heading-m" style="margin-top:32px">Audit trail</h2>'
+       '<p class="nhs-body">Every search and every decision, with who made it and when. Entries cannot be edited.</p>')
+    if ss.audit:
+        arows = "".join(f'<tr><td style="white-space:nowrap">{a["When"]}</td><td>{html.escape(a["Who"])}</td>'
+                        f'<td>{html.escape(a["Action"])}</td><td>{a["Patient"]}</td><td>{html.escape(a["Note"])}</td></tr>' for a in ss.audit)
+        md('<table class="nhs-table"><thead><tr><th>When</th><th>Who</th><th>Action</th><th>Patient</th><th>Note</th></tr></thead>'
+           f'<tbody>{arows}</tbody></table>')
+    else:
+        md('<div class="nhs-inset">Nothing has happened yet.</div>')
 
 footer()

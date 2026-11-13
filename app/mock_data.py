@@ -225,3 +225,28 @@ def get_criteria(trial_id):
 
 def get_run(trial_id):
     return {"trace": TRACE, "funnel": FUNNEL, "stats": STATS, "results": RESULTS, "sql": SQL, "sql_funnel": SQL_FUNNEL}
+
+
+# ---------- Standards ----------
+# SNOMED CT concepts for each criterion. Illustrative: check codes against the UK SNOMED CT browser before real use.
+SNOMED = {
+    "C1": ("424144002", "Current chronological age"),
+    "C2": ("60621009", "Body mass index"),
+    "C3": ("254637007", "Non-small cell lung cancer"),
+    "C4": ("423740007", "ECOG performance status"),
+    "C5": ("11429006", "Consultation"),
+    "C6": ("85828009", "Autoimmune disease"),
+    "C7": ("367336001", "Chemotherapy"),
+    "C8": ("77386006", "Pregnancy"),
+}
+
+# Mock "what if" model: how the shortlist size changes if a criterion is relaxed or dropped.
+WHATIF_BASE = 12
+
+
+def whatif(bmi_max=35, age_min=18, dropped=()):
+    """Real version: re-run SQL counts and reuse cached LLM 1 verdicts (no new LLM calls needed)."""
+    n = WHATIF_BASE + round(max(0, bmi_max - 35) * 1.8) - round(max(0, 35 - bmi_max) * 1.5)
+    n += {16: 0, 18: 0}.get(age_min, -round((age_min - 18) * 0.05))
+    n += sum({"C4": 4, "C5": 3, "C6": 5, "C7": 2, "C8": 1}.get(c, 0) for c in dropped)
+    return max(n, 0)
