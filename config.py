@@ -14,9 +14,8 @@ ROOT = Path(__file__).resolve().parent
 
 # --- Model server -----------------------------------------------------------
 # Ollama's OpenAI-compatible endpoint. docker-compose sets LLM_BASE_URL /
-# OPENAI_BASE_URL; outside docker we fall back to the organiser's Ollama.
-# On the Spark, the team's own Ollama (both models kept loaded, faster) is:
-#   LLM_BASE_URL=http://10.41.30.10:11434/v1
+# OPENAI_BASE_URL; outside docker we fall back to the Ollama on this machine
+# (on the Spark that is now the team's own Ollama, with both models loaded).
 LLM_BASE_URL = (
     os.getenv("LLM_BASE_URL")
     or os.getenv("OPENAI_BASE_URL")

@@ -17,6 +17,11 @@ services:
     restart: unless-stopped
     ports:
       - "${LANIP:?set LANIP}:11434:11434"
+      # Also take localhost:11434 so code on the Spark that defaults to localhost uses this server.
+      # The organiser's spark-hack-ollama (which normally holds 127.0.0.1:11434) was stopped with the
+      # owner's approval on 2026-11-13 to stop duplicate model loads. To restore it: drop this line,
+      # redeploy, then `docker start spark-hack-ollama`.
+      - "127.0.0.1:11434:11434"
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_NUM_PARALLEL: "8"

@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Studies - Advolare</title>
+  <link rel="stylesheet" href="/static/nhsuk/nhsuk-frontend.min.css">
+  <link rel="stylesheet" href="/static/advolare.css">
+  <link rel="icon" href="/static/nhsuk/assets/images/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+  <script>document.body.className += ' js-enabled nhsuk-frontend-supported';</script>
+  <a class="nhsuk-skip-link" href="#maincontent">Skip to main content</a>
+  <header class="nhsuk-header" role="banner">
+    <div class="nhsuk-header__container nhsuk-width-container">
+      <div class="nhsuk-header__service">
+        <a class="nhsuk-header__service-name" href="/">Advolare - Clinical Trial Screening System</a>
+      </div>
+      <span class="adv-device">Runs on this device</span>
+    </div>
+    <nav class="nhsuk-header__navigation" aria-label="Menu">
+      <div class="nhsuk-header__navigation-container nhsuk-width-container">
+        <ul class="nhsuk-header__navigation-list">
+          <li class="nhsuk-header__navigation-item nhsuk-header__navigation-item--current"><a class="nhsuk-header__navigation-link" href="/">Studies</a></li>
+          <li class="nhsuk-header__navigation-item"><a class="nhsuk-header__navigation-link" href="/studies/new">Create a study</a></li>
+        </ul>
+      </div>
+    </nav>
+  </header>
+  <div class="nhsuk-width-container">
+    <main class="nhsuk-main-wrapper" id="maincontent" role="main">
+      <div class="nhsuk-grid-row">
+        <div class="nhsuk-grid-column-two-thirds">
+          <h1>Studies</h1>
+          <p class="nhsuk-lede-text">Find patients in the hospital's records who may be eligible for a study. Every match is checked by two AI models and then by you.</p>
+        </div>
+      </div>
+      <a class="nhsuk-button" href="/studies/new">Create a study</a>
+      <div id="studies"><p class="nhsuk-body">Loading studies…</p></div>
+    </main>
+  </div>
+  <footer class="nhsuk-footer" role="contentinfo">
+    <div class="nhsuk-width-container">
+      <div class="nhsuk-footer__meta">
+        <h2 class="nhsuk-u-visually-hidden">About this service</h2>
+        <p class="nhsuk-body-s">Advolare runs entirely on an NVIDIA DGX Spark. No patient data leaves the device.
+          All patient data shown is synthetic. Advolare supports clinicians; it does not decide who is eligible.
+          Not an official NHS service.</p>
+      </div>
+    </div>
+  </footer>
+  <script src="/static/advolare.js"></script>
+  <script src="/static/index.js"></script>
+</body>
+</html>

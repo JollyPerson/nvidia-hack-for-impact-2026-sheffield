@@ -4,8 +4,8 @@
     python scripts/smoke_test_models.py            # all five patients
     python scripts/smoke_test_models.py P001       # just one, quicker
 
-    # use the team's own Ollama, which keeps both models loaded (faster):
-    LLM_BASE_URL=http://10.41.30.10:11434/v1 python scripts/smoke_test_models.py
+    # point at a different Ollama if needed:
+    LLM_BASE_URL=http://<host>:11434/v1 python scripts/smoke_test_models.py
 
 Prints each verdict next to the correct answer and saves the full prompts and
 outputs to logs/ so you can see what the models did.
