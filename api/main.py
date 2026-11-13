@@ -22,7 +22,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 import config
 from api import extras, features, mock_data
@@ -49,9 +49,14 @@ def mock_mode() -> bool:
     return _env_true("ADVOLARE_MOCK")
 
 
+LIMIT_OVERRIDE: dict[str, int] = {}  # developer mode: {"patients": n} for the next runs (0 = no limit)
+
+
 def max_candidates() -> int | None:
     """ADVOLARE_MAX_CANDIDATES: screen at most this many prefilter candidates (each costs several model calls).
-    0 or empty means no limit."""
+    0 means no limit; empty means 5. A developer-mode override wins until reset."""
+    if "patients" in LIMIT_OVERRIDE:
+        return LIMIT_OVERRIDE["patients"] or None
     raw = os.environ.get("ADVOLARE_MAX_CANDIDATES", "").strip()  # compose passes it empty when unset
     n = int(raw) if raw else 5
     return n or None
@@ -486,7 +491,34 @@ def dev_toggle(body: FeatureToggle):
 def dev_reset():
     features.clear_overrides()
     llm_mod.REASONING_OVERRIDES.clear()
+    LIMIT_OVERRIDE.clear()
     return features.describe()
+
+
+class LimitSetting(BaseModel):
+    patients: int | None = Field(default=None, ge=0, le=500)  # None = back to ADVOLARE_MAX_CANDIDATES; 0 = no limit
+
+
+def _limit():
+    n = max_candidates()
+    return {"patients": n or 0, "source": "developer mode" if "patients" in LIMIT_OVERRIDE else
+            "ADVOLARE_MAX_CANDIDATES (default 5)"}
+
+
+@app.get("/api/dev/limit", dependencies=[Depends(features.require_dev_mode)])
+def dev_limit():
+    """Developer mode: how many prefilter candidates the next run screens with the models."""
+    return _limit()
+
+
+@app.post("/api/dev/limit", dependencies=[Depends(features.require_dev_mode)])
+def dev_set_limit(body: LimitSetting):
+    if body.patients is None:
+        LIMIT_OVERRIDE.clear()
+    else:
+        LIMIT_OVERRIDE["patients"] = body.patients
+    _log("", f"Developer mode: patients per run set to {_limit()['patients'] or 'no limit'}", who="Developer")
+    return _limit()
 
 
 class ReasoningToggle(BaseModel):

@@ -283,3 +283,16 @@ def test_max_candidates_empty_env_keeps_default(monkeypatch, raw, want):
     else:
         monkeypatch.setenv("ADVOLARE_MAX_CANDIDATES", raw)
     assert main.max_candidates() == want
+
+
+def test_dev_limit_overrides_env_until_reset(monkeypatch):
+    monkeypatch.setattr(main, "LIMIT_OVERRIDE", {})
+    monkeypatch.setenv("ADVOLARE_MAX_CANDIDATES", "2")
+    assert client.get("/api/dev/limit").json()["patients"] == 2
+    assert client.post("/api/dev/limit", json={"patients": 5}).json()["patients"] == 5
+    assert main.max_candidates() == 5
+    client.post("/api/dev/limit", json={"patients": 0})
+    assert main.max_candidates() is None
+    client.delete("/api/dev/features")
+    assert main.max_candidates() == 2
+    assert client.post("/api/dev/limit", json={"patients": -1}).status_code == 422

@@ -46,7 +46,7 @@ Flags are read on every request, so a restart picks up a change; no rebuild is n
 | Setting | Default | What it does |
 |---|---|---|
 | `ADVOLARE_MOCK` | `false` | `true` uses the canned results in `mock_data.py` (no warehouse or model server needed) |
-| `ADVOLARE_MAX_CANDIDATES` | `5` | Screen at most this many prefilter candidates per run, most recently admitted first. Each costs about 2 model calls per notes criterion. `0` = all |
+| `ADVOLARE_MAX_CANDIDATES` | `5` (`2` on the Spark) | Screen at most this many prefilter candidates per run, most recently admitted first. Each costs about 2 model calls per notes criterion. `0` = all |
 | `ADVOLARE_WORKERS` | `2` | Patients screened at once (threads; each opens its own read-only warehouse connection) |
 | `ADVOLARE_CRITERIA_WORKERS` | `4` | Criteria checked at once per patient, in each stage. Keep `ADVOLARE_WORKERS` x this within the Spark's `OLLAMA_NUM_PARALLEL` (8) |
 | `ONE_CALL_CHECKS` | `1` | When all of a patient's notes fit in the prompt, check each criterion in one model call (notes + coded diagnoses, no tool loop). `0` = tool loop |

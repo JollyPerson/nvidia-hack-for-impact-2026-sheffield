@@ -81,7 +81,7 @@ services:
       VERIFIER_MODEL: qwen3.6:35b-a3b
       # Screening (see api/README.md): ADVOLARE_MOCK=true for canned results; cap on candidates per run (0 = all).
       ADVOLARE_MOCK: ${ADVOLARE_MOCK:-}
-      ADVOLARE_MAX_CANDIDATES: ${ADVOLARE_MAX_CANDIDATES:-}
+      ADVOLARE_MAX_CANDIDATES: ${ADVOLARE_MAX_CANDIDATES:-2}  # live demo cap; dev-mode footer can change it
       ADVOLARE_WORKERS: ${ADVOLARE_WORKERS:-4}            # patients screened at once (Ollama takes 8 requests)
       STAGE1_STOP_ON_EXCLUSION: ${STAGE1_STOP_ON_EXCLUSION:-1}
       # Model reasoning (thinking): off by default; on|off for both, or per role. Dev-mode footer can override.

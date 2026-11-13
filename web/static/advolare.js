@@ -14,8 +14,8 @@ const A = {
   async devPanel() {
     const box = document.getElementById("adv-dev");
     if (!box) return;
-    let rows, models;
-    try { [rows, models] = await Promise.all([A.api("/api/dev/features"), A.api("/api/dev/models")]); }
+    let rows, models, limit;
+    try { [rows, models, limit] = await Promise.all([A.api("/api/dev/features"), A.api("/api/dev/models"), A.api("/api/dev/limit")]); }
     catch (e) { return; } // 404 = developer mode is off
     box.classList.remove("adv-hidden");
     box.innerHTML = `<div class="nhsuk-form-group"><fieldset class="nhsuk-fieldset" aria-describedby="adv-dev-hint">
@@ -34,6 +34,11 @@ const A = {
         <label class="nhsuk-label nhsuk-checkboxes__label" for="dev-reason-${m.role}">${m.role === "screener" ? "Screener" : "Verifier"} reasoning</label>
         <div class="nhsuk-hint nhsuk-checkboxes__hint" id="dev-reason-${m.role}-hint">${A.esc(m.model)}, up to ${m.max_output_tokens} output tokens. Set by ${A.esc(m.source)}.</div></div>`).join("")}</div>
       </fieldset></div>
+      <div class="nhsuk-form-group">
+        <label class="nhsuk-label nhsuk-label--s" for="dev-limit">Patients screened per run</label>
+        <div class="nhsuk-hint" id="dev-limit-hint">How many of the prefilter's candidates (most recently admitted first) the models check in the next run. 0 means all of them. Set by ${A.esc(limit.source)}.</div>
+        <input class="nhsuk-input nhsuk-input--width-3" id="dev-limit" type="number" min="0" max="500" inputmode="numeric" value="${limit.patients}" aria-describedby="dev-limit-hint">
+      </div>
       <button class="nhsuk-button nhsuk-button--secondary nhsuk-button--small" type="button" id="adv-dev-reset">Use deploy settings</button>`;
     const apply = async (method, body) => {
       await A.api("/api/dev/features", { method, body: body && JSON.stringify(body) });
@@ -47,6 +52,11 @@ const A = {
       await A.api("/api/dev/models", { method: "POST", body: JSON.stringify({ role: cb.dataset.role, reasoning: cb.checked }) });
       A.devPanel();
     }));
+    document.getElementById("dev-limit").addEventListener("change", async e => {
+      const n = parseInt(e.target.value, 10);
+      if (Number.isInteger(n) && n >= 0) await A.api("/api/dev/limit", { method: "POST", body: JSON.stringify({ patients: n }) });
+      A.devPanel();
+    });
     document.getElementById("adv-dev-reset").addEventListener("click", () => apply("DELETE"));
   },
   esc(s) {
