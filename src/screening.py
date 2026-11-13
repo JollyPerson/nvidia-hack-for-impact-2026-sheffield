@@ -288,8 +288,26 @@ def screen_patient(
     result = PatientResult(study_id=study.id or "", patient_id=patient_id)
     parallel = workers > 1 and len(criteria) > 1
 
+    # Pre-extracted facts (src/facts.py): criteria answered by code from PatientFacts, no model call.
+    # They skip both model stages; the rest are screened live below.
+    from src.facts import fact_verdict  # facts.py imports this module
+
+    live = []
+    for i, c in criteria:
+        v = fact_verdict(conn, patient_id, c)
+        if v is None:
+            live.append((i, c))
+            continue
+        assessments[_criterion_id(c, i)].stage1 = v
+        if _excluded_by(v, c, tools):
+            result.reasons.append(f"Exclusion met (pre-extracted facts): {c.description}")
+    criteria_all, criteria = criteria, live
+    parallel = workers > 1 and len(criteria) > 1
+
     # Stage 1: screener
-    if parallel:
+    if not criteria:
+        pass
+    elif parallel:
         verdicts = _in_parallel(workers, [lambda c=c: screen_criterion(llm, tools, c, "screener", audit=audit)
                                           for _, c in criteria])
         for (i, c), v in zip(criteria, verdicts):
@@ -307,7 +325,7 @@ def screen_patient(
     result.shortlisted = not result.reasons
 
     # Stage 2: verifier, only for shortlisted patients (and not in single-model mode)
-    if result.shortlisted and verifier_on():
+    if result.shortlisted and verifier_on() and criteria:
         def verify(i, c):
             a = assessments[_criterion_id(c, i)]
             pointers = a.stage1.citations if a.stage1 else []
@@ -321,7 +339,8 @@ def screen_patient(
             assessments[_criterion_id(c, i)].stage2 = v
 
     # Keep the study's own criterion order in the output.
-    result.assessments = [assessments[_criterion_id(c, i)] for i, c in sorted(criteria)]
+    result.assessments = [assessments[_criterion_id(c, i)] for i, c in sorted(criteria_all)]
+
     return result
 
 

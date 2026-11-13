@@ -22,6 +22,7 @@ adds plain-English `reasons` for the clinician.
 
 from __future__ import annotations
 
+from src.facts import FACTS_TAG
 from src.screening import ALL_NOTES_READ
 from src.models import (
     Criterion,
@@ -52,7 +53,8 @@ def _agreed(a: CriterionAssessment | None, value: VerdictValue) -> bool:
 
 def _not_mentioned(a: CriterionAssessment, single_model: bool = False) -> bool:
     """Both models (or, in single-model mode, the one model) read every note and found nothing."""
-    stages = [a.stage1] if single_model and a.stage2 is None else [a.stage1, a.stage2]
+    from_facts = a.stage1 is not None and FACTS_TAG in a.stage1.reasoning  # code read every note's facts
+    stages = [a.stage1] if (single_model or from_facts) and a.stage2 is None else [a.stage1, a.stage2]
     return all(v is not None and v.verdict == VerdictValue.insufficient and not v.citations
                and v.reasoning.startswith(ALL_NOTES_READ) for v in stages) and not a.flags
 

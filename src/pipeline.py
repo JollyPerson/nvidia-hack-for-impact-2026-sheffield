@@ -19,6 +19,7 @@ from typing import Callable
 
 import config
 from src.decide import decide
+from src.facts import FACTS_TAG
 from src.llm import LLM, reasoning_on, verifier_on
 from src.models import CriterionAssessment, FinalStatus, PatientResult, ScreeningRun, Study, Verdict, VerdictValue
 from src.prefilter import connect_readonly, run_prefilter
@@ -226,9 +227,15 @@ def run_screening(
                      for r in results for a in r.assessments for v in (a.stage1, a.stage2))
         # With patients in parallel the stages overlap, so split the wall time by each model's share of the work.
         total = (timed.seconds["screener"] + timed.seconds["verifier"]) or 1.0
+        from_facts = sum(a.stage1 is not None and FACTS_TAG in a.stage1.reasoning
+                         for r in results for a in r.assessments)
+        checks = sum(c.kind == "notes" for c in study.criteria) * len(results)
+        facts_note = (f" {from_facts} of {checks} checks answered from pre-extracted patient facts "
+                      f"(no model call), the rest read live." if from_facts else "")
         emit(_step(2, "done", f"Checked {n_notes} notes criteria for {len(results)} candidates, one call per "
-                              f"criterion, {workers} patients x {criteria_workers} criteria at a time. Shortlisted {run.shortlisted_stage1}. "
+                              f"live criterion, {workers} patients x {criteria_workers} criteria at a time. Shortlisted {run.shortlisted_stage1}. "
                               f"Reasoning {'on' if reasoning_on('screener') else 'off'}."
+                              + facts_note
                               + (f" {errors} model calls failed and count as insufficient." if errors else ""),
                    wall * timed.seconds["screener"] / total, config.SCREENER_MODEL))
         if single:

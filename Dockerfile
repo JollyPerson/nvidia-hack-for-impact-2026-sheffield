@@ -11,8 +11,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
 # The synthetic warehouse is generated, not committed (seeded, so identical every build; about 2 seconds),
 # then the LLM-written notes in data/notes_cache.json are matched to their encounters (data/load_notes.py).
+# Pre-extracted patient facts (src/facts.py) are reloaded from data/facts_cache.json when it is there.
 # The app database (studies, runs, decisions, audit) is created and seeded on start-up.
-RUN python data/generate.py && python data/load_notes.py
+RUN python data/generate.py && python data/load_notes.py && python data/extract_facts.py --from-cache
 
 EXPOSE 8000
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
