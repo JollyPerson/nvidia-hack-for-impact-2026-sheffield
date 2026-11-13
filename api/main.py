@@ -180,7 +180,8 @@ def _summary(r: PatientResult) -> str:
     """One line for the results table, from the decide step's reasons (screening's own 'Stage 1:' notes left out)."""
     if r.patient_id in MOCK_VIEWS and MOCK_VIEWS[r.patient_id].summary:
         return MOCK_VIEWS[r.patient_id].summary
-    reasons = [x for x in r.reasons if not x.startswith("Stage 1:")] or r.reasons
+    reasons = [x for x in r.reasons if not x.startswith(("Stage 1:", "Not mentioned in the notes"))] or \
+        [x for x in r.reasons if not x.startswith("Stage 1:")] or r.reasons
     return "; ".join(reasons[:3]) + (f"; and {len(reasons) - 3} more" if len(reasons) > 3 else "")
 
 
@@ -581,7 +582,7 @@ def dev_toggle_reasoning(body: ReasoningToggle):
 @app.get("/api/health")
 def health():
     return {"ok": True, "screener": config.SCREENER_MODEL, "verifier": config.VERIFIER_MODEL,
-            "reasoning": {m["role"]: m["reasoning"] for m in _models()}, "verifier": llm_mod.verifier_on(),
+            "reasoning": {m["role"]: m["reasoning"] for m in _models()}, "verifier_on": llm_mod.verifier_on(),
             "max_candidates": max_candidates() or 0}
 
 

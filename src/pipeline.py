@@ -20,7 +20,7 @@ from typing import Callable
 import config
 from src.decide import decide
 from src.facts import FACTS_TAG
-from src.llm import LLM, reasoning_on, verifier_on
+from src.llm import LLM, verifier_on
 from src.models import CriterionAssessment, FinalStatus, PatientResult, ScreeningRun, Study, Verdict, VerdictValue
 from src.prefilter import connect_readonly, run_prefilter
 from src.screening import screen_patient
@@ -232,19 +232,17 @@ def run_screening(
         checks = sum(c.kind == "notes" for c in study.criteria) * len(results)
         facts_note = (f" {from_facts} of {checks} checks answered from pre-extracted patient facts "
                       f"(no model call), the rest read live." if from_facts else "")
-        emit(_step(2, "done", f"Checked {n_notes} notes criteria for {len(results)} candidates, one call per "
-                              f"live criterion, {workers} patients x {criteria_workers} criteria at a time. Shortlisted {run.shortlisted_stage1}. "
-                              f"Reasoning {'on' if reasoning_on('screener') else 'off'}."
+        emit(_step(2, "done", f"Read the notes of {len(results)} patients against {n_notes} criteria, "
+                              f"{workers * criteria_workers} checks at a time. Shortlisted {run.shortlisted_stage1}."
                               + facts_note
                               + (f" {errors} model calls failed and count as insufficient." if errors else ""),
                    wall * timed.seconds["screener"] / total, config.SCREENER_MODEL))
         if single:
-            emit(_step(3, "done", "Skipped: single-model mode (ADVOLARE_VERIFIER=off). The screener's verdicts "
-                                  "are checked by validation and decided by code without a second model.", 0.0))
+            emit(_step(3, "done", "Not used in this run: the screener's answers go straight to the quote check, "
+                                  "and code makes the call.", 0.0))
         else:
             emit(_step(3, "done", f"Independently re-read the records of the {run.shortlisted_stage1} shortlisted "
-                                  f"patients. Stages 1 and 2 took {wall:.0f}s together. "
-                                  f"Reasoning {'on' if reasoning_on('verifier') else 'off'}.",
+                                  f"patients. Stages 1 and 2 took {wall:.0f}s together.",
                        wall * timed.seconds["verifier"] / total, config.VERIFIER_MODEL))
 
         # 4. Validation: model citations only (code-made citations come from the warehouse itself)

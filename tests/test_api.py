@@ -315,6 +315,6 @@ def test_dev_verifier_toggle(monkeypatch):
     monkeypatch.setattr(main.config, "VERIFIER_ENABLED", True)
     assert client.get("/api/dev/verifier").json()["enabled"] is True
     assert client.post("/api/dev/verifier", json={"enabled": False}).json()["enabled"] is False
-    assert client.get("/api/health").json()["verifier"] is False
+    assert client.get("/api/health").json()["verifier_on"] is False
     client.delete("/api/dev/features")
     assert client.get("/api/dev/verifier").json()["enabled"] is True
