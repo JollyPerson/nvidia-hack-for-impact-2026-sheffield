@@ -1,0 +1,117 @@
+"""API tests: the browser's contract with api/main.py, run against the mock pipeline."""
+import os
+
+os.environ["ADVOLARE_MOCK_STEP_DELAY"] = "0"
+
+import pytest  # noqa: E402
+from fastapi.testclient import TestClient  # noqa: E402
+
+from api.main import app, store  # noqa: E402
+
+client = TestClient(app)
+
+NEW_STUDY = {
+    "title": "Test study", "condition": "Pneumonia", "study_design": "Observational cohort",
+    "intervention": "None", "primary_outcome": "Readmission", "target_sample_size": 10,
+    "recruitment_start": "2026-11-01", "recruitment_end": "2027-11-01", "chief_investigator": "Dr Test",
+    "sponsor": "Test sponsor", "ethics_reference": "IRAS 000000 (mock)",
+    "criteria": [
+        {"type": "inclusion", "kind": "structured", "description": "Aged 16 or over", "field": "age", "operator": ">=", "value": 16},
+        {"type": "exclusion", "kind": "notes", "description": "COPD on home oxygen"},
+    ],
+}
+
+
+@pytest.fixture(autouse=True)
+def fresh_store():
+    store.reset()
+
+
+def run_screening(study_id="S-001"):
+    run = client.post(f"/api/studies/{study_id}/runs").json()
+    with client.stream("GET", f"/api/runs/{run['run_id']}/events") as events:
+        body = "".join(events.iter_text())
+    return run, body
+
+
+def test_lists_studies():
+    studies = client.get("/api/studies").json()
+    assert [s["short_title"] for s in studies] == ["PRISM-CAP", "HOME-COPD", "NEWS-SEP"]
+    assert not any(s["screened"] for s in studies)
+
+
+def test_pages_are_served():
+    for path in ["/", "/studies/new", "/studies/S-001"]:
+        page = client.get(path)
+        assert page.status_code == 200 and "Advolare - Clinical Trial Screening System" in page.text
+
+
+def test_create_study_assigns_ids_and_does_not_run():
+    created = client.post("/api/studies", json=NEW_STUDY)
+    assert created.status_code == 201
+    study = created.json()
+    assert study["id"] == "S-004"
+    assert [c["id"] for c in study["criteria"]] == ["C1", "C2"]
+    assert client.get(f"/api/studies/{study['id']}/results").status_code == 404
+
+
+@pytest.mark.parametrize("change", [
+    {"title": ""},
+    {"target_sample_size": 0},
+    {"recruitment_end": "2026-01-01"},
+    {"criteria": []},
+    {"criteria": [{"type": "inclusion", "kind": "structured", "description": "Age", "field": "age"}]},
+])
+def test_create_study_rejects_invalid(change):
+    assert client.post("/api/studies", json={**NEW_STUDY, **change}).status_code == 422
+
+
+def test_draft_criteria_from_free_text():
+    text = client.get("/api/criteria/example").json()["text"]
+    draft = client.post("/api/criteria/draft", json={"text": text}).json()
+    kinds = [(c["type"], c["kind"]) for c in draft["criteria"]]
+    assert kinds[0] == ("inclusion", "structured")
+    assert ("exclusion", "notes") in kinds
+    assert draft["assumptions"]
+
+
+def test_run_streams_every_step_then_results():
+    run, body = run_screening()
+    assert run["status"] == "running"
+    assert body.count("event: step") == 10 and "event: complete" in body
+    results = client.get("/api/studies/S-001/results").json()
+    assert results["status"] == "complete"
+    assert results["funnel"]["likely_eligible"] == 3
+    statuses = {p["result"]["status"] for p in results["patients"]}
+    assert statuses == {"likely_eligible", "needs_review", "excluded"}
+
+
+def test_results_never_contain_contact_details():
+    run_screening()
+    text = client.get("/api/studies/S-001/results").text
+    assert "07700" not in text and "example.com" not in text
+
+
+def test_contact_only_after_approval():
+    run_screening()
+    url = "/api/studies/S-001/patients/MRN-100231"
+    assert client.get(url + "/contact").status_code == 403
+    rejected = client.post(url + "/decision", json={"decision": "rejected"}).json()
+    assert rejected["contact"] is None and client.get(url + "/contact").status_code == 403
+    approved = client.post(url + "/decision", json={"decision": "approved", "note": "Checked notes"}).json()
+    assert approved["patient"]["result"]["approved"] is True
+    contact = client.get(url + "/contact").json()
+    assert contact["mobile"].startswith("07700 900") and contact["email"].endswith("@example.com")
+
+
+def test_audit_trail_records_actions():
+    run_screening()
+    client.post("/api/studies/S-001/patients/MRN-100517/decision", json={"decision": "rejected", "note": "Mother had COPD"})
+    actions = [a["action"] for a in client.get("/api/studies/S-001/audit").json()]
+    assert actions[0] == "Rejected" and "Started screening" in actions
+
+
+def test_unknown_study_and_patient():
+    assert client.get("/api/studies/S-999").status_code == 404
+    run_screening()
+    assert client.get("/api/studies/S-001/patients/MRN-000000").status_code == 404
