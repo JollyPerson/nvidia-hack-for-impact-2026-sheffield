@@ -83,7 +83,7 @@ REFERENCE_DATE = os.getenv("REFERENCE_DATE")  # e.g. "2026-11-13"
 REFERENCE_NOW = datetime.fromisoformat(os.getenv("REFERENCE_NOW", "2026-11-13T09:00:00"))
 
 # --- Pre-extracted patient facts (src/facts.py) ------------------------------------
-# On: a notes criterion in the fact list is answered by code from PatientFacts (filled once at ingest by
+# Off by default (13 Nov demo: live screening cites the notes the UI shows). On: a notes criterion in the fact list is answered by code from PatientFacts (filled once at ingest by
 # data/extract_facts.py), with no model call; anything not covered is screened live as before.
 # Off, or PatientFacts missing/incomplete for a patient: live screening only.
-FACTS_ENABLED = os.getenv("ADVOLARE_FACTS", "on").strip().lower() not in {"off", "false", "0", "no"}
+FACTS_ENABLED = os.getenv("ADVOLARE_FACTS", "off").strip().lower() not in {"off", "false", "0", "no"}
