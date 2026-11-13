@@ -176,3 +176,20 @@ def test_no_without_a_negation_in_the_quote_becomes_not_mentioned():
     }), note)
     assert got["copd_home_oxygen"] == got["immunosuppressed"] == got["acs_cause"] == ("not_mentioned", "")
     assert got["lacks_capacity_or_eol"][0] == got["hf_iv_diuretics"][0] == "no"
+
+
+def test_copd_yes_must_quote_oxygen():
+    note = "PMH: COPD, on home O2 2L. Hx: COPD."
+    bad = facts.parse_extraction(json.dumps({"copd_home_oxygen": {"value": "yes", "quote": "PMH: COPD"}}), note)
+    good = facts.parse_extraction(json.dumps({"copd_home_oxygen": {"value": "yes", "quote": "on home O2 2L"}}), note)
+    assert bad["copd_home_oxygen"] == ("not_mentioned", "")
+    assert good["copd_home_oxygen"][0] == "yes"
+
+
+def test_guard_also_applies_to_stored_facts(db):
+    extract_facts.run(db, llm=LLM(FakeExtractor()), log=lambda *_: None)
+    conn = _conn(db)
+    conn.execute("UPDATE PatientFacts SET Value='yes', Quote='PMH: COPD' WHERE NoteID='N-4001' AND FactKey='copd_home_oxygen'")
+    v = facts.fact_verdict(conn, "P004", STUDY.criteria[1])
+    assert v.verdict == VerdictValue.insufficient and not v.citations  # downgraded, nothing else mentions it
+    conn.close()

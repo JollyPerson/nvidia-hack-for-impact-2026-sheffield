@@ -40,6 +40,7 @@ class Fact:
     key: str
     question: str  # what the extraction model answers for each note
     criteria: tuple[str, ...] = field(default=())  # criterion descriptions (any study) this fact answers
+    yes_needs: str | None = None  # regex a "yes" quote must contain (code guard), else not mentioned
 
 
 FACTS: list[Fact] = [
@@ -51,7 +52,8 @@ FACTS: list[Fact] = [
     Fact("copd_home_oxygen",
          "Does the patient have COPD AND use long-term home oxygen (LTOT, home O2, oxygen concentrator)? "
          "'no' only if the note says they are not on home oxygen or have no COPD.",
-         ("COPD on long-term home oxygen", "COPD requiring long-term home oxygen")),
+         ("COPD on long-term home oxygen", "COPD requiring long-term home oxygen"),
+         yes_needs=r"\bO2\b|oxygen|LTOT|concentrator"),
     Fact("immunosuppressed",
          "Is the patient immunosuppressed: current chemotherapy, high-dose steroids, other immunosuppressants, "
          "or an organ transplant? 'no' only if the note explicitly rules this out.",
@@ -151,6 +153,16 @@ NEGATION = re.compile(r"\b(no|not|nil|none|never|denies|denied|negative|neg|clea
                       r"ruled out|r/o|excluded|unremarkable|normal)\b|\bn/?a\b", re.I)
 
 
+def _quote_supports(f: Fact, value: str, quote: str) -> bool:
+    """A "no" must quote an explicit negation; a "yes" must quote the fact's key term where it has one
+    (Nemotron answered "COPD on home oxygen: yes" quoting only "PMH: COPD")."""
+    if value == "no":
+        return bool(NEGATION.search(quote))
+    if value == "yes" and f.yes_needs:
+        return bool(re.search(f.yes_needs, quote, re.I))
+    return True
+
+
 def parse_extraction(text: str | None, note_text: str, facts: list[Fact] = FACTS) -> dict[str, tuple[str, str]]:
     """Model reply -> {fact_key: (value, quote)}. Code checks every quote is really in the note:
     a yes / no / uncertain whose quote is missing or not found is stored as UNVERIFIED (live fallback)."""
@@ -170,8 +182,8 @@ def parse_extraction(text: str | None, note_text: str, facts: list[Fact] = FACTS
         if value == "not_mentioned":
             out[f.key] = (value, "")
         elif quote and _norm(quote) in note:
-            if value == "no" and not NEGATION.search(quote):
-                value, quote = "not_mentioned", ""  # code rule: a "no" must quote an explicit negation
+            if not _quote_supports(f, value, quote):
+                value, quote = "not_mentioned", ""  # code rules: see _quote_supports
             out[f.key] = (value, quote)
         else:
             out[f.key] = (UNVERIFIED, quote)
@@ -211,7 +223,8 @@ def fact_verdict(conn, patient_id: str, criterion: Criterion) -> Verdict | None:
     rows = conn.execute(
         "SELECT NoteID, Value, Quote FROM PatientFacts WHERE LocalPatientIdentifier = ? AND FactKey = ?",
         (patient_id, fact.key)).fetchall()
-    by_note = {r[0]: (r[1], r[2]) for r in rows}
+    by_note = {r[0]: (r[1], r[2]) if _quote_supports(fact, r[1], r[2] or "") else ("not_mentioned", "")
+               for r in rows}
     if any(n not in by_note or by_note[n][0] not in VALUES for n in notes):
         return None  # a note not extracted yet, an extraction error or an unverified quote: screen live
 
